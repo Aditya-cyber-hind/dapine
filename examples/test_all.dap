@@ -1,0 +1,44 @@
+func double(x) = x * 2
+func triple(x) = x * 3
+func square(x) = x * x
+func half(x) = x / 2
+func add_hundred(x) = x + 100
+
+pipeline mega_test() {
+
+    read "data.csv" as raw
+
+    print raw
+
+    stats raw
+
+    let cutoff = 18
+    let bonus = 50
+
+    filter raw where age >= cutoff as adults
+
+    sort adults by age desc as sorted
+
+    limit sorted 3 as top
+
+    mutate top add doubled = double(age) as m1
+    mutate m1 add tripled = triple(age) as m2
+
+    rename m2 name to full_name, city to location as renamed
+
+    select full_name, age, location, doubled, tripled from renamed as selected
+
+    print selected
+
+    group selected by location [
+        count(full_name) as people,
+        avg(age) as avg_age
+    ] as grouped
+
+    sort grouped by people desc as final
+
+    print final
+
+    write final into "repl_output.json"
+
+}
