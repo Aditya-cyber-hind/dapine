@@ -118,7 +118,7 @@ class ChartEngine:
             f.write(html)
         
         print(f"✅ Chart saved to {target}")
-        webbrowser.open(f"file:///{os.path.abspath(target)}")
+        #webbrowser.open(f"file:///{os.path.abspath(target)}")
     
     def _to_number(self, val):
         if val is None:

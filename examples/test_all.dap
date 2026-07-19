@@ -1,22 +1,105 @@
-pipeline full_power_test() {
+func double(x) = x * 2
+func triple(x) = x * 3
+func ppsf(price, sqft) = price / sqft
+func luxury(bed, bath, sqft) = (bed * 100) + (bath * 50) + (sqft / 10)
+
+pipeline dapine_full_benchmark() {
+
+    // ===== LOAD DATA =====
     read "houses.csv" as raw
     print raw
     stats raw
-    
-    filter raw where price > 300000 as expensive
-    mutate expensive add price_per_sqft = price / sqft as with_metric
-    sort with_metric by price_per_sqft desc as sorted
-    
-    group sorted by bedrooms [
-        count(price) as homes,
-        avg(price) as avg_price,
+
+    // ===== VARIABLES =====
+    let min_price = 250000
+    let max_budget = 600000
+
+    // ===== ALL FILTERS =====
+    filter raw where price >= min_price and price <= max_budget as in_budget
+    filter in_budget where bedrooms >= 3 as big
+    filter big where bathrooms > 1 as nice
+    filter nice where sqft != 1000 as clean
+
+    // ===== ALL MUTATIONS =====
+    mutate clean add doubled = double(price) as m1
+    mutate m1 add tripled = triple(sqft) as m2
+    mutate m2 add price_per_sqft = ppsf(price, sqft) as m3
+    mutate m3 add score = luxury(bedrooms, bathrooms, sqft) as m4
+    mutate m4 add millions = price / 1000000 as m5
+    mutate m5 add bed_sq = bedrooms * bedrooms as m6
+    mutate m6 add ppb = price / bedrooms as m7
+    mutate m7 add root_sqft = sqrt(sqft) as m8
+    mutate m8 add r_ppsf = round(price_per_sqft) as m9
+    mutate m9 add f_ppsf = floor(price_per_sqft) as m10
+    mutate m10 add c_ppsf = ceil(price_per_sqft) as m11
+    mutate m11 add abs_diff = abs(price - 400000) as m12
+
+    // ===== STRING OPS =====
+    mutate m12 add label = concat("Home ", bedrooms, "BR ", bathrooms, "BA") as m13
+    mutate m13 add upper_lbl = upper(label) as m14
+    mutate m14 add lower_lbl = lower(label) as m15
+    mutate m15 add lbl_len = length(label) as m16
+    mutate m16 add trimmed_lbl = trim(label) as m17
+
+    // ===== RENAME & SELECT =====
+    rename m17 bedrooms to beds, bathrooms to baths, price to cost as renamed
+    select label, beds, baths, sqft, cost, price_per_sqft, score, millions, ppb, root_sqft, r_ppsf, f_ppsf, c_ppsf, abs_diff from renamed as selected
+
+    // ===== CASTING =====
+    cast selected beds as string as c1
+    cast c1 millions as float as c2
+    cast c2 label as string as c3
+
+    // ===== SORTING =====
+    sort c3 by score desc as by_luxury
+    sort c3 by price_per_sqft asc as by_ppsf
+    sort c3 by cost desc as by_price
+
+    // ===== LIMIT & SAMPLE =====
+    limit by_luxury 3 as top3
+    sample by_price 50% as sampled
+
+    // ===== DISTINCT =====
+    distinct top3 as unique_top
+
+    // ===== GROUP BY =====
+    group c3 by beds [
+        count(label) as homes,
+        sum(cost) as total_cost,
+        avg(cost) as avg_cost,
+        min(cost) as cheapest,
+        max(cost) as priciest,
         avg(price_per_sqft) as avg_ppsf
-    ] as results
-    
-    print results
-    
-    write results into "report.json"
-    excel write results into "output.xlsx"
-    report results as "House Price Analysis" into "analysis.md"
-    chart results avg_price by bedrooms as bar into "chart.html"
+    ] as grouped
+
+    sort grouped by homes desc as final
+
+    // ===== MACHINE LEARNING =====
+    train raw predict price using linear_regression as lr_model
+    train raw predict price using random_forest as rf_model
+    train raw predict price using decision_tree as dt_model
+
+    predict raw using lr_model as lr_pred
+    predict raw using rf_model as rf_pred
+    predict raw using dt_model as dt_pred
+
+    select bedrooms, bathrooms, sqft, price, prediction from dt_pred as ml_results
+
+    // ===== OUTPUTS =====
+    print final
+    print ml_results
+
+    write final into "benchmark_results.json"
+    write final into "benchmark_results.csv"
+    excel write final into "benchmark_results.xlsx"
+    report final as "Dapine Benchmark Report" into "benchmark_report.md"
+
+    write ml_results into "ml_predictions.json"
+    write ml_results into "ml_predictions.csv"
+    excel write ml_results into "ml_predictions.xlsx"
+
+    chart final homes by beds as bar into "benchmark_bar.html"
+    chart final avg_cost by beds as line into "benchmark_line.html"
+    chart ml_results price by bedrooms as scatter into "ml_scatter.html"
+
 }

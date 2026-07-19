@@ -1,6 +1,6 @@
 # House Price Analysis
 
-**Generated:** 2026-07-19 18:47:02  
+**Generated:** 2026-07-19 18:54:19  
 **Rows:** 3  
 **Columns:** bedrooms, homes, avg_price, avg_ppsf
 

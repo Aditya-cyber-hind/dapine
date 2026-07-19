@@ -73,4 +73,4 @@ class ReportEngine:
             f.write(md)
         
         print(f"✅ Report saved to {target}")
-        webbrowser.open(f"file:///{os.path.abspath(target)}")
+        #webbrowser.open(f"file:///{os.path.abspath(target)}")
