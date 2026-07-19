@@ -2,15 +2,23 @@
 
 
 
+!\[Python](https://img.shields.io/badge/Python-3.x-blue)
+
+!\[License](https://img.shields.io/badge/License-MIT-green)
+
+!\[Status](https://img.shields.io/badge/Status-Active-success)
+
+
+
 A lightweight \*\*data pipeline programming language\*\* built in Python.
 
 
 
-Dapine allows you to read, transform, analyze, visualize, and export data using a simple, readable syntax. It supports data processing, statistics, charts, machine learning workflows, and an interactive REPL environment.
+Dapine lets you read, transform, analyze, visualize, and export data using a simple, readable syntax. It supports data processing, statistics, charts, machine learning workflows, and an interactive REPL environment.
 
 
 
-> Built by a 13-year-old developer learning and exploring programming.
+> Built by a 13-year-old developer exploring programming and language design.
 
 
 
@@ -18,19 +26,27 @@ Dapine allows you to read, transform, analyze, visualize, and export data using 
 
 
 
-\## 🚀 What is Dapine?
+\## 📌 About Dapine
 
 
 
-Dapine is a domain-specific language (DSL) designed for creating data pipelines.
+Dapine is a \*\*domain-specific language (DSL)\*\* for creating data pipelines.
 
 
 
-Instead of writing long Python scripts for every data task, Dapine lets you describe your workflow:
+It allows users to describe complete workflows:
 
 
 
-\*\*Read → Transform → Analyze → Visualize → Export\*\*
+```
+
+Read → Transform → Analyze → Visualize → Export
+
+```
+
+
+
+Instead of writing long scripts, Dapine provides a clean syntax for handling data tasks.
 
 
 
@@ -46,15 +62,15 @@ Instead of writing long Python scripts for every data task, Dapine lets you desc
 
 
 
-\* Read and write CSV files
+\- Read and write CSV files
 
-\* Read and write JSON files
+\- Read and write JSON files
 
-\* Join tables
+\- Join tables
 
-\* Union datasets
+\- Union datasets
 
-\* Database backend support
+\- Database backend support
 
 
 
@@ -62,23 +78,23 @@ Instead of writing long Python scripts for every data task, Dapine lets you desc
 
 
 
-\* Filter rows using comparisons and string matching
+\- Filter rows with comparisons and string matching
 
-\* Sort data
+\- Sort data
 
-\* Limit results
+\- Limit results
 
-\* Sample datasets
+\- Sample datasets
 
-\* Remove duplicates
+\- Remove duplicate rows
 
-\* Create new columns with `mutate`
+\- Create new columns using `mutate`
 
-\* Rename columns
+\- Rename columns
 
-\* Select columns
+\- Select columns
 
-\* Cast data types
+\- Cast data types
 
 
 
@@ -86,25 +102,25 @@ Instead of writing long Python scripts for every data task, Dapine lets you desc
 
 
 
-\* Group by operations
+\- Group by operations
 
-\* Count, sum, average, minimum, maximum
+\- Count, sum, average, minimum, maximum
 
-\* Mean, median, and standard deviation statistics
-
-
-
-\## 🧩 Programming Features
+\- Mean, median, and standard deviation statistics
 
 
 
-\* Custom functions with `func`
+\## 🧠 Programming Features
 
-\* Variables with `let`
 
-\* Loops with `for`
 
-\* Conditional logic with `if/else`
+\- Custom functions with `func`
+
+\- Variables with `let`
+
+\- Loops with `for`
+
+\- Conditional logic with `if/else`
 
 
 
@@ -112,15 +128,15 @@ Instead of writing long Python scripts for every data task, Dapine lets you desc
 
 
 
-\* `upper`
+\- `upper`
 
-\* `lower`
+\- `lower`
 
-\* `length`
+\- `length`
 
-\* `trim`
+\- `trim`
 
-\* `concat`
+\- `concat`
 
 
 
@@ -128,15 +144,15 @@ Instead of writing long Python scripts for every data task, Dapine lets you desc
 
 
 
-\* `abs`
+\- `abs`
 
-\* `round`
+\- `round`
 
-\* `sqrt`
+\- `sqrt`
 
-\* `ceil`
+\- `ceil`
 
-\* `floor`
+\- `floor`
 
 
 
@@ -144,15 +160,15 @@ Instead of writing long Python scripts for every data task, Dapine lets you desc
 
 
 
-\* `today`
+\- `today`
 
-\* `year`
+\- `year`
 
-\* `month`
+\- `month`
 
-\* `date\_add`
+\- `date\_add`
 
-\* `date\_diff`
+\- `date\_diff`
 
 
 
@@ -160,19 +176,19 @@ Instead of writing long Python scripts for every data task, Dapine lets you desc
 
 
 
-Create browser-based charts:
+Generate browser-based charts:
 
 
 
-\* Bar charts
+\- Bar charts
 
-\* Pie charts
+\- Pie charts
 
-\* Line charts
+\- Line charts
 
-\* Scatter plots
+\- Scatter plots
 
-\* Radar charts
+\- Radar charts
 
 
 
@@ -180,27 +196,27 @@ Create browser-based charts:
 
 
 
-Train and use machine learning models:
+Create machine learning workflows:
 
 
 
-\* Linear regression
+\- Train models
 
-\* Prediction pipelines
+\- Make predictions
 
-\* Model-based workflows
-
-
-
-\## 🔍 Developer Tools
+\- Linear regression support
 
 
 
-\* Transformation lineage tracking
+\## 🔍 Developer Features
 
-\* Interactive REPL mode
 
-\* Custom error handling
+
+\- Transformation lineage tracking
+
+\- Interactive REPL mode
+
+\- Custom error handling
 
 
 
@@ -208,11 +224,11 @@ Train and use machine learning models:
 
 
 
-\# ⚡ Quick Start
+\# 🚀 Quick Start
 
 
 
-Clone the repository:
+\## Clone Repository
 
 
 
@@ -226,7 +242,7 @@ cd dapine
 
 
 
-Install dependencies:
+\## Install Dependencies
 
 
 
@@ -238,7 +254,7 @@ pip install duckdb scikit-learn
 
 
 
-Run a pipeline:
+\## Run Dapine
 
 
 
@@ -250,7 +266,7 @@ python dapine.py examples/test\_all.dap
 
 
 
-Start interactive mode:
+\## Start REPL
 
 
 
@@ -384,7 +400,7 @@ Run commands interactively:
 
 
 
-```
+```text
 
 dap> read "data.csv" as raw
 
@@ -442,15 +458,15 @@ dapine/
 
 ├── parser.py          # Parser
 
-├── ast\_nodes.py       # AST definitions
+├── ast\_nodes.py       # AST nodes
 
-├── interpreter.py     # Language interpreter
+├── interpreter.py     # Interpreter
 
 ├── runtime.py         # Runtime engine
 
 ├── errors.py          # Error handling
 
-├── charts.py          # Chart generation
+├── charts.py          # Chart generator
 
 ├── ml\_engine.py       # Machine learning engine
 
@@ -478,17 +494,17 @@ Future improvements:
 
 
 
-\* \[ ] More machine learning algorithms
+\- \[ ] More machine learning algorithms
 
-\* \[ ] Streaming data pipelines
+\- \[ ] Streaming data pipelines
 
-\* \[ ] Parallel execution
+\- \[ ] Parallel execution
 
-\* \[ ] Plugin system
+\- \[ ] Plugin system
 
-\* \[ ] Better error messages
+\- \[ ] Better error messages
 
-\* \[ ] Package manager for Dapine libraries
+\- \[ ] Package manager for Dapine libraries
 
 
 
@@ -500,7 +516,7 @@ Future improvements:
 
 
 
-Contributions, suggestions, and ideas are welcome!
+Suggestions, bug reports, and contributions are welcome.
 
 
 
@@ -528,11 +544,9 @@ MIT License
 
 
 
-\*\*Atulya\*\*
+\*\*Aditya\*\*
 
 
 
 A young developer exploring programming, data, and language design.
-
-
 
