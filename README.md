@@ -2,43 +2,15 @@
 
 
 
-A simple data pipeline language built in Python. Transform CSV/JSON data with an easy-to-read syntax. Now with Machine Learning, Charts, and REPL mode.
+A data pipeline language built in Python by a 13-year-old developer.
 
 
 
-\## Features
+\## What it does
 
 
 
-\- Read CSV, JSON files (auto-detect format)
-
-\- Filter with ==, !=, >, <, >=, <=, AND, OR, starts\_with, contains, ends\_with
-
-\- Aggregate with group by (count, sum, avg, min, max)
-
-\- Transform with mutate, rename, select, cast
-
-\- Stats - min, max, mean, median, stdev
-
-\- Strings - upper, lower, length, trim, concat
-
-\- Math - abs, round, sqrt, ceil, floor, pow
-
-\- Dates - today, year, month, day, date\_add, date\_diff, date\_format
-
-\- Write CSV, JSON output
-
-\- Lineage tracking - know where every value came from
-
-\- REPL mode - interactive data exploration
-
-\- Custom functions with func
-
-\- Control flow - let, for, if/else, case/when
-
-\- Charts - bar, pie, line, scatter, radar (opens in browser)
-
-\- Machine Learning - train models, make predictions (linear regression, random forest, decision tree)
+Dapine reads CSV/JSON files, transforms data, and outputs results. It has machine learning, charts, and an interactive REPL mode.
 
 
 
@@ -58,7 +30,51 @@ python repl.py
 
 
 
-\## Example Pipeline
+\## Features
+
+
+
+\- Read/write CSV and JSON files
+
+\- Filter data with comparisons and string matching
+
+\- Sort, limit, sample, and deduplicate rows
+
+\- Create new columns with mutate
+
+\- Rename, select, and cast columns
+
+\- Group by with count, sum, avg, min, max
+
+\- Join and union tables
+
+\- Statistics (mean, median, stdev)
+
+\- Custom functions with func
+
+\- Variables with let
+
+\- Loops with for
+
+\- Conditional logic with if/else
+
+\- String functions (upper, lower, length, trim, concat)
+
+\- Math functions (abs, round, sqrt, ceil, floor)
+
+\- Date functions (today, year, month, date\_add, date\_diff)
+
+\- Charts that open in your browser (bar, pie, line, scatter, radar)
+
+\- Machine learning (train models and predict)
+
+\- Lineage tracking for every transformation
+
+\- Interactive REPL mode
+
+
+
+\## Example
 
 
 
@@ -66,7 +82,7 @@ func double(x) = x \* 2
 
 
 
-pipeline analyze\_users() {
+pipeline example() {
 
 &#x20;   read "data.csv" as raw
 
@@ -76,15 +92,9 @@ pipeline analyze\_users() {
 
 &#x20;   filter raw where age >= 18 as adults
 
-&#x20;   mutate adults add doubled\_age = double(age) as with\_double
+&#x20;   mutate adults add double\_age = double(age) as with\_age
 
-&#x20;   group with\_double by city \[
-
-&#x20;       count(name) as users,
-
-&#x20;       avg(age) as avg\_age
-
-&#x20;   ] as report
+&#x20;   group with\_age by city \[count(name) as users, avg(age) as avg\_age] as report
 
 &#x20;   sort report by users desc as final
 
@@ -100,11 +110,9 @@ pipeline analyze\_users() {
 
 
 
-pipeline predict\_prices() {
+pipeline ml\_example() {
 
 &#x20;   read "houses.csv" as data
-
-&#x20;   stats data
 
 &#x20;   train data predict price using linear\_regression as model
 
@@ -112,15 +120,13 @@ pipeline predict\_prices() {
 
 &#x20;   predict new\_data using model as estimated\_price
 
-&#x20;   print estimated\_price
-
 &#x20;   write estimated\_price into "predictions.json"
 
 }
 
 
 
-\## REPL Mode
+\## REPL Commands
 
 
 
@@ -132,6 +138,8 @@ dap> filter raw where age > 18 as adults
 
 dap> stats adults
 
+dap> chart adults age by name as bar into "chart.html"
+
 dap> /tables
 
 dap> /lineage
@@ -140,105 +148,33 @@ dap> /exit
 
 
 
-\## Syntax Reference
+\## Files
 
 
 
-| Task | Syntax |
+dapine.py - Main entry point
 
-|------|--------|
+repl.py - Interactive REPL
 
-| Read CSV | read "file.csv" as name |
+lexer.py - Tokenizer
 
-| Read JSON | read "file.json" as name |
+parser.py - Parser
 
-| Print | print name |
+ast\_nodes.py - AST nodes
 
-| Stats | stats name |
+interpreter.py - Interpreter
 
-| Filter | filter name where col > 10 as result |
+runtime.py - Runtime engine
 
-| Sort asc | sort name by col asc as result |
+errors.py - Error handling
 
-| Sort desc | sort name by col desc as result |
+charts.py - Chart generator
 
-| Limit | limit name 10 as result |
+ml\_engine.py - Machine learning engine
 
-| Mutate | mutate name add new = col \* 2 as result |
+db\_engine.py - Database backend
 
-| Rename | rename name old to new as result |
-
-| Select | select col1, col2 from name as result |
-
-| Cast | cast name col as string as result |
-
-| Group | group name by col \[count(col) as n] as result |
-
-| Sample | sample name 50% as result |
-
-| Distinct | distinct name as result |
-
-| Join | join a with b on col as result |
-
-| Union | union a with b as result |
-
-| Variable | let x = 10 |
-
-| Function | func f(x) = x \* 2 |
-
-| For loop | for row in table { print table } |
-
-| If/else | if x == 1 { write table into "out.json" } |
-
-| Chart | chart raw val by label as bar into "chart.html" |
-
-| Train | train data predict target using linear\_regression as model |
-
-| Predict | predict data using model as output |
-
-| Write CSV | write name into "out.csv" |
-
-| Write JSON | write name into "out.json" |
-
-
-
-\## Project Structure
-
-
-
-dapine/
-
-├── dapine.py (Main entry)
-
-├── repl.py (Interactive REPL)
-
-├── lexer.py (Tokenizer)
-
-├── parser.py (Parser)
-
-├── ast\_nodes.py (AST nodes)
-
-├── interpreter.py (Interpreter)
-
-├── runtime.py (Runtime engine)
-
-├── errors.py (Error handling)
-
-├── charts.py (Chart generation)
-
-├── ml\_engine.py (Machine learning)
-
-├── db\_engine.py (Database backend)
-
-└── examples/
-
-&#x20;   ├── hello.dap (First program)
-
-&#x20;   ├── test\_all.dap (Full test suite)
-
-&#x20;   ├── chart\_test.dap (Chart demo)
-
-&#x20;   └── ml\_test.dap (ML demo)
+examples/ - Example pipelines
 
 
 
@@ -246,9 +182,5 @@ dapine/
 
 
 
-A 13-year-old developer. Still growing!
-
-
-
-\## Star this repo if you like it!
+A 13-year-old developer learning to code.
 
