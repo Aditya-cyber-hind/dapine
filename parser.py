@@ -120,20 +120,18 @@ class Parser:
             "IF": self.parse_if, "LET": self.parse_let,
             "FOR": self.parse_for, "CASE": self.parse_case,
             "CAST": self.parse_cast, "SAMPLE": self.parse_sample,
-            "STATS": self.parse_stats,
+            "STATS": self.parse_stats, "CHART": self.parse_chart,
         }
         if token.type in type_map:
             return type_map[token.type]()
         raise ParserError(f"Unknown command: '{token.value}'", token.line, token.column,
-                         hint="Valid commands: read, filter, select, sort, mutate, write, etc.")
+                         hint="Valid commands: read, filter, select, sort, mutate, write, chart, etc.")
 
     def parse_read(self):
         line = self.peek().line
         self.consume("READ")
         source = self.consume("STRING_LIT").value.strip('"')
         options = {}
-
-        # Auto-detect format from extension
         if source.endswith(".json"):
             format_type = "json"
         elif source.endswith(".csv"):
@@ -142,10 +140,7 @@ class Parser:
             format_type = "parquet"
         else:
             format_type = "csv"
-
         alias = None
-
-        # Check for "as" - could be format or alias
         if self.peek() and self.peek().type == "AS":
             self.consume("AS")
             next_token = self.peek()
@@ -156,7 +151,6 @@ class Parser:
                     alias = self.consume("IDENTIFIER").value
             else:
                 alias = self.consume("IDENTIFIER").value
-
         return ReadStep(source, format_type, options, alias, line)
 
     def parse_http_read(self):
@@ -221,22 +215,17 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         self.consume("INTO")
         target = self.consume("STRING_LIT").value.strip('"')
-
-        # Auto-detect format from extension
         if target.endswith(".json"):
             format_type = "json"
         elif target.endswith(".csv"):
             format_type = "csv"
         else:
             format_type = "csv"
-
-        # Check for explicit format
         if self.peek() and self.peek().type == "AS":
             self.consume("AS")
             next_token = self.peek()
             if next_token and next_token.value in ("csv", "json", "parquet"):
                 format_type = self.consume().value
-
         return WriteStep(input_ref, target, format_type, None, line)
 
     def parse_group(self):
@@ -488,6 +477,25 @@ class Parser:
             alias = self.consume("IDENTIFIER").value
         return StatsStep(input_ref, alias, line)
 
+    def parse_chart(self):
+        line = self.peek().line
+        self.consume("CHART")
+        input_ref = self.consume("IDENTIFIER").value
+        value_col = self.consume("IDENTIFIER").value
+        self.consume("BY")
+        label_col = self.consume("IDENTIFIER").value
+        self.consume("AS")
+        chart_type = self.peek().value
+        self.consume()
+        self.consume("INTO")
+        target = self.consume("STRING_LIT").value.strip('"')
+        title = f"{chart_type} chart of {value_col} by {label_col}"
+        alias = None
+        if self.peek() and self.peek().type == "AS":
+            self.consume("AS")
+            alias = self.consume("IDENTIFIER").value
+        return ChartStep(input_ref, chart_type, label_col, value_col, title, target, alias, line)
+
     # ============ EXPRESSIONS ============
 
     def parse_expression(self):
@@ -553,7 +561,8 @@ class Parser:
             return NullLiteral()
         elif token.type in ("CONCAT", "UPPER", "LOWER", "LENGTH", "TRIM",
                            "ABS", "ROUND", "CEIL", "FLOOR", "SQRT",
-                           "YEAR", "MONTH", "DAY", "NOW", "TODAY", "POW"):
+                           "YEAR", "MONTH", "DAY", "NOW", "TODAY", "POW",
+                           "DATE_ADD", "DATE_DIFF", "DATE_FORMAT", "DAY_NAME", "MONTH_NAME"):
             func = self.consume().value
             self.consume("LPAREN")
             args = []

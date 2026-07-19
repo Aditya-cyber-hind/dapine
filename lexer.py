@@ -30,6 +30,11 @@ KEYWORDS = {
     "floor": "FLOOR", "sqrt": "SQRT", "pow": "POW",
     "now": "NOW", "today": "TODAY",
     "year": "YEAR", "month": "MONTH", "day": "DAY",
+    "chart": "CHART", "bar": "BAR", "line": "LINE", "pie": "PIE",
+    "scatter": "SCATTER", "radar": "RADAR",
+    "date_add": "DATE_ADD", "date_diff": "DATE_DIFF",
+    "date_format": "DATE_FORMAT", "day_name": "DAY_NAME",
+    "month_name": "MONTH_NAME",
 }
 
 class Token:

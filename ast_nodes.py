@@ -234,3 +234,12 @@ class FuncDef(ASTNode):
         self.params = params
         self.body_expr = body_expr
         self.line = line
+class ChartStep(Step):
+    def __init__(self, input_ref, chart_type, label_col, value_col, title, target, alias, line):
+        super().__init__("chart", [input_ref, chart_type, label_col, value_col], alias, line)
+        self.input_ref = input_ref
+        self.chart_type = chart_type
+        self.label_col = label_col
+        self.value_col = value_col
+        self.title = title
+        self.target = target

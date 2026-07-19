@@ -4,7 +4,7 @@ import urllib.request
 import random
 import statistics
 import math
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from errors import RuntimeError, ColumnNotFoundError, DataFrameNotFoundError
 from ast_nodes import *
 
@@ -61,6 +61,7 @@ class Runtime:
         elif isinstance(step, SampleStep): return self.execute_sample(step)
         elif isinstance(step, StatsStep): return self.execute_stats(step)
         elif isinstance(step, IfStep): return self.execute_if(step)
+        elif isinstance(step, ChartStep): return self.execute_chart(step)
         return None
 
     def execute_read(self, step):
@@ -419,6 +420,12 @@ class Runtime:
                 self.execute_step(s)
         return None
 
+    def execute_chart(self, step):
+        from charts import ChartEngine
+        engine = ChartEngine(self)
+        engine.generate_chart(step.input_ref, step.chart_type, step.label_col, step.value_col, step.title, step.target)
+        return None
+
     # ============ TYPE INFERENCE ============
 
     def _infer_type(self, value):
@@ -522,6 +529,21 @@ class Runtime:
             return date.today()
         elif expr.name == "now":
             return datetime.now()
+        elif expr.name == "date_add":
+            if len(args) >= 2 and isinstance(args[0], date):
+                return args[0] + timedelta(days=args[1])
+        elif expr.name == "date_diff":
+            if len(args) >= 2 and isinstance(args[0], date) and isinstance(args[1], date):
+                return (args[0] - args[1]).days
+        elif expr.name == "date_format":
+            if len(args) >= 2 and isinstance(args[0], date):
+                return args[0].strftime(str(args[1]))
+        elif expr.name == "day_name":
+            if isinstance(args[0], date):
+                return args[0].strftime("%A")
+        elif expr.name == "month_name":
+            if isinstance(args[0], date):
+                return args[0].strftime("%B")
         
         return None
 
