@@ -267,3 +267,35 @@ class PredictStep(Step):
         self.input_ref = input_ref
         self.model_name = model_name
         self.output_col = output_col
+class DBReadStep(Step):
+    def __init__(self, connection_string, query, alias, line):
+        super().__init__("db_read", [connection_string, query], alias, line)
+        self.connection_string = connection_string
+        self.query = query
+
+class DBWriteStep(Step):
+    def __init__(self, input_ref, connection_string, table_name, alias, line):
+        super().__init__("db_write", [input_ref, connection_string, table_name], alias, line)
+        self.input_ref = input_ref
+        self.connection_string = connection_string
+        self.table_name = table_name
+
+class ExcelReadStep(Step):
+    def __init__(self, source, sheet_name, alias, line):
+        super().__init__("excel_read", [source], alias, line)
+        self.source = source
+        self.sheet_name = sheet_name
+
+class ExcelWriteStep(Step):
+    def __init__(self, input_ref, target, sheet_name, alias, line):
+        super().__init__("excel_write", [input_ref, target], alias, line)
+        self.input_ref = input_ref
+        self.target = target
+        self.sheet_name = sheet_name
+
+class ReportStep(Step):
+    def __init__(self, input_ref, title, target, alias, line):
+        super().__init__("report", [input_ref, title, target], alias, line)
+        self.input_ref = input_ref
+        self.title = title
+        self.target = target

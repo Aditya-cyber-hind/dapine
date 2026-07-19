@@ -46,6 +46,9 @@ KEYWORDS = {
     "logistic_regression": "LOGISTIC_REGRESSION",
     "random_forest_classifier": "RANDOM_FOREST_CLASSIFIER",
     "decision_tree_classifier": "DECISION_TREE_CLASSIFIER",
+    "db_read": "DB_READ", "db_write": "DB_WRITE",
+    "excel": "EXCEL", "xlsx": "XLSX", "sheet": "SHEET",
+    "report": "REPORT",
 }
 
 class Token:

@@ -110,6 +110,16 @@ class Interpreter:
             return self.runtime.execute_train(step)
         elif isinstance(step, PredictStep):
             return self.runtime.execute_predict(step)
+        elif isinstance(step, ExcelWriteStep):
+            self.runtime.execute_excel_write(step)
+        elif isinstance(step, ExcelReadStep):
+            return self.runtime.execute_excel_read(step)
+        elif isinstance(step, DBReadStep):
+            return self.runtime.execute_db_read(step)
+        elif isinstance(step, DBWriteStep):
+            self.runtime.execute_db_write(step)
+        elif isinstance(step, ReportStep):
+            return self.runtime.execute_report(step)
         else:
             raise RuntimeError(f"Unknown step: {step.operation}", step.line)
         return None

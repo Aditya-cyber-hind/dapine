@@ -66,6 +66,11 @@ class Runtime:
         elif isinstance(step, ChartStep): return self.execute_chart(step)
         elif isinstance(step, TrainStep): return self.execute_train(step)
         elif isinstance(step, PredictStep): return self.execute_predict(step)
+        elif isinstance(step, DBReadStep): return self.execute_db_read(step)
+        elif isinstance(step, DBWriteStep): self.execute_db_write(step)
+        elif isinstance(step, ExcelReadStep): return self.execute_excel_read(step)
+        elif isinstance(step, ExcelWriteStep): self.execute_excel_write(step)
+        elif isinstance(step, ReportStep): return self.execute_report(step)
         return None
 
     def execute_read(self, step):
@@ -648,6 +653,47 @@ class Runtime:
         else:
             return self._eval_atomic(expr, row)
 
+    def execute_db_read(self, step):
+        from connectors import Connectors
+        conn = Connectors()
+        rows, columns = conn.read_database(step.connection_string, step.query, step.alias)
+        name = step.alias or f"_df_{len(self.dataframes)}"
+        df = DataFrame(rows, columns, f"db read from {step.connection_string[:30]}...")
+        self.dataframes[name] = df
+        self.log_lineage(name, "database", "DB READ")
+        return df
+
+    def execute_db_write(self, step):
+        from connectors import Connectors
+        df = self.get_df(step.input_ref, step.line)
+        conn = Connectors()
+        conn.write_database(df.rows, df.schema, step.connection_string, step.table_name)
+        print(f"✓ Written {len(df.rows)} rows to database table '{step.table_name}'")
+        self.log_lineage(step.table_name, step.input_ref, "DB WRITE")
+
+    def execute_excel_read(self, step):
+        from connectors import Connectors
+        conn = Connectors()
+        rows, columns = conn.read_excel(step.source, step.sheet_name)
+        name = step.alias or f"_df_{len(self.dataframes)}"
+        df = DataFrame(rows, columns, f"excel read from {step.source}")
+        self.dataframes[name] = df
+        self.log_lineage(name, step.source, "EXCEL READ")
+        return df
+
+    def execute_excel_write(self, step):
+        from connectors import Connectors
+        df = self.get_df(step.input_ref, step.line)
+        conn = Connectors()
+        conn.write_excel(df.rows, df.schema, step.target, step.sheet_name)
+        print(f"✓ Written {len(df.rows)} rows to {step.target}")
+        self.log_lineage(step.target, step.input_ref, "EXCEL WRITE")
+
+    def execute_report(self, step):
+        from reports import ReportEngine
+        engine = ReportEngine(self)
+        engine.generate_report(step.input_ref, step.title, step.target)
+        return None
     def _coerce_types(self, left, right):
         if isinstance(left, date) and isinstance(right, str):
             try:

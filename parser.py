@@ -122,6 +122,10 @@ class Parser:
             "CAST": self.parse_cast, "SAMPLE": self.parse_sample,
             "STATS": self.parse_stats, "CHART": self.parse_chart,
             "TRAIN": self.parse_train, "PREDICT": self.parse_predict,
+            "DB_READ": self.parse_db_read,
+            "DB_WRITE": self.parse_db_write,
+            "EXCEL": self.parse_excel,
+            "REPORT": self.parse_report,
         }
         if token.type in type_map:
             return type_map[token.type]()
@@ -557,7 +561,62 @@ class Parser:
             right = self.parse_primary()
             left = ArithOp(left, op, right)
         return left
+    def parse_db_read(self):
+        line = self.peek().line
+        self.consume("DB_READ")
+        conn_str = self.consume("STRING_LIT").value.strip('"')
+        self.consume("AS")
+        query = self.consume("STRING_LIT").value.strip('"')
+        alias = None
+        if self.peek() and self.peek().type == "AS":
+            self.consume("AS")
+            alias = self.consume("IDENTIFIER").value
+        return DBReadStep(conn_str, query, alias, line)
 
+    def parse_db_write(self):
+        line = self.peek().line
+        self.consume("DB_WRITE")
+        input_ref = self.consume("IDENTIFIER").value
+        self.consume("INTO")
+        conn_str = self.consume("STRING_LIT").value.strip('"')
+        self.consume("AS")
+        table_name = self.consume("IDENTIFIER").value
+        return DBWriteStep(input_ref, conn_str, table_name, None, line)
+
+    def parse_excel(self):
+        line = self.peek().line
+        self.consume("EXCEL")
+        if self.peek().type == "READ":
+            self.consume("READ")
+            source = self.consume("STRING_LIT").value.strip('"')
+            sheet_name = None
+            if self.peek() and self.peek().type == "SHEET":
+                self.consume("SHEET")
+                sheet_name = self.consume("STRING_LIT").value.strip('"')
+            alias = None
+            if self.peek() and self.peek().type == "AS":
+                self.consume("AS")
+                alias = self.consume("IDENTIFIER").value
+            return ExcelReadStep(source, sheet_name, alias, line)
+        elif self.peek().type == "WRITE":
+            self.consume("WRITE")
+            input_ref = self.consume("IDENTIFIER").value
+            self.consume("INTO")
+            target = self.consume("STRING_LIT").value.strip('"')
+            sheet_name = "Sheet1"
+            return ExcelWriteStep(input_ref, target, sheet_name, None, line)
+        else:
+            raise ParserError(f"Expected READ or WRITE after EXCEL", line)
+
+    def parse_report(self):
+        line = self.peek().line
+        self.consume("REPORT")
+        input_ref = self.consume("IDENTIFIER").value
+        self.consume("AS")
+        title = self.consume("STRING_LIT").value.strip('"')
+        self.consume("INTO")
+        target = self.consume("STRING_LIT").value.strip('"')
+        return ReportStep(input_ref, title, target, None, line)
     def parse_primary(self):
         token = self.peek()
         if token.type == "STRING_LIT":

@@ -1,108 +1,22 @@
-func double(x) = x * 2
-func triple(x) = x * 3
-func square(x) = x * x
-func half(x) = x / 2
-func add_hundred(x) = x + 100
-func complex_op(x) = (x * 10) + (double(x) / 2) - triple(1)
-
-pipeline ultimate_strength_test() {
-
-    read "data.csv" as raw
-
+pipeline full_power_test() {
+    read "houses.csv" as raw
     print raw
-
     stats raw
-
-    let cutoff = 18
-    let bonus = 50
-    let factor = 10
-
-    filter raw where age == 25 as age_25
-    filter raw where age != 17 as not_17
-    filter raw where age > 20 as over_20
-    filter raw where age < 25 as under_25
-    filter raw where age >= 19 as at_least_19
-    filter raw where age <= 22 as at_most_22
-
-    filter raw where age >= cutoff and age < 40 as adults
-    filter adults where city == "NYC" or city == "LA" as big_cities
-
-    filter big_cities where name starts_with "A" or name starts_with "C" as a_or_c
-    filter raw where city contains "NY" as has_ny
-    filter raw where name ends_with "e" as ends_e
-
-    filter raw where city != "Chicago" as not_chicago
-
-    sort not_chicago by name asc as sorted_asc
-    sort sorted_asc by age desc as sorted_desc
-
-    limit sorted_desc 10 as limited
-
-    mutate limited add doubled = double(age) as m1
-    mutate m1 add tripled = triple(age) as m2
-    mutate m2 add squared = square(age) as m3
-    mutate m3 add with_bonus = add_hundred(age) + bonus as m4
-    mutate m4 add complex = complex_op(age) as m5
-    mutate m5 add added = age + 5 as m6
-    mutate m6 add subtracted = age - 5 as m7
-    mutate m7 add multiplied = age * factor as m8
-    mutate m8 add divided = age / 2 as m9
-    mutate m9 add months = age * 12 as m10
-    mutate m10 add half_age = half(age) as m11
-    mutate m11 add century = age + 100 as m12
-
-    mutate m12 add abs_val = abs(age) as m13
-    mutate m13 add rounded = round(age) as m14
-    mutate m14 add sqrt_val = sqrt(age) as m15
-    mutate m15 add ceil_val = ceil(half_age) as m16
-    mutate m16 add floor_val = floor(half_age) as m17
-
-    mutate m17 add name_city = concat(name, " from ", city) as m18
-    mutate m18 add greeting = concat("Hello ", name) as m19
-
-    rename m19 name to full_name, city to location, age to years as renamed
-
-    select full_name, years, location, doubled, tripled, squared, with_bonus, complex, added, subtracted, multiplied, divided, months, half_age, century, abs_val, rounded, sqrt_val, ceil_val, floor_val, name_city, greeting from renamed as selected
-
-    cast selected years as string as c1
-    cast c1 doubled as int as c2
-    cast c2 tripled as float as c3
-    cast c3 full_name as string as c4
-
-    mutate c4 add UPPER = upper(full_name) as s1
-    mutate s1 add LOWER = lower(full_name) as s2
-    mutate s2 add LEN = length(full_name) as s3
-    mutate s3 add TRIMMED = trim(full_name) as s4
-    mutate s4 add CONCATTED = concat(full_name, "_", location) as s5
-
-    sample s5 100% as sampled
-
-    distinct sampled as unique_data
-
-    group unique_data by location [
-        count(full_name) as people_count,
-        sum(years) as total_years,
-        avg(years) as avg_years,
-        min(years) as youngest,
-        max(years) as oldest
-    ] as grouped
-
-    sort grouped by people_count desc as sorted_grouped
-
-    select location, people_count, avg_years, youngest, oldest from sorted_grouped as final_select
-
-    for row in final_select {
-        print final_select
-    }
-
-    print final_select
-
-    let should_write = 1
-    if should_write == 1 {
-        write final_select into "strength_output.json"
-        write final_select into "strength_output.csv"
-    }
-
-    chart final_select people_count by location as bar into "strength_chart.html"
-
+    
+    filter raw where price > 300000 as expensive
+    mutate expensive add price_per_sqft = price / sqft as with_metric
+    sort with_metric by price_per_sqft desc as sorted
+    
+    group sorted by bedrooms [
+        count(price) as homes,
+        avg(price) as avg_price,
+        avg(price_per_sqft) as avg_ppsf
+    ] as results
+    
+    print results
+    
+    write results into "report.json"
+    excel write results into "output.xlsx"
+    report results as "House Price Analysis" into "analysis.md"
+    chart results avg_price by bedrooms as bar into "chart.html"
 }
