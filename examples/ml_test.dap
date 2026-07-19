@@ -1,0 +1,9 @@
+pipeline ml_demo() {
+    read "houses.csv" as raw
+    print raw
+    stats raw
+    train raw predict price using linear_regression as price_model
+    predict raw using price_model as predicted_price
+    print predicted_price
+    write predicted_price into "predictions.json"
+}

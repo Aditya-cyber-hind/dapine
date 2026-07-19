@@ -106,6 +106,10 @@ class Interpreter:
             return self.runtime.execute_if(step)
         elif isinstance(step, ChartStep):
             return self.runtime.execute_chart(step)
+        elif isinstance(step, TrainStep):
+            return self.runtime.execute_train(step)
+        elif isinstance(step, PredictStep):
+            return self.runtime.execute_predict(step)
         else:
             raise RuntimeError(f"Unknown step: {step.operation}", step.line)
         return None

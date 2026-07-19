@@ -35,6 +35,17 @@ KEYWORDS = {
     "date_add": "DATE_ADD", "date_diff": "DATE_DIFF",
     "date_format": "DATE_FORMAT", "day_name": "DAY_NAME",
     "month_name": "MONTH_NAME",
+    "chart": "CHART", "bar": "BAR", "line": "LINE", "pie": "PIE",
+    "scatter": "SCATTER", "radar": "RADAR",
+    "date_add": "DATE_ADD", "date_diff": "DATE_DIFF",
+    "date_format": "DATE_FORMAT", "day_name": "DAY_NAME",
+    "month_name": "MONTH_NAME",
+    "train": "TRAIN", "predict": "PREDICT", "using": "USING",
+    "model": "MODEL", "linear_regression": "LINEAR_REGRESSION",
+    "random_forest": "RANDOM_FOREST", "decision_tree": "DECISION_TREE",
+    "logistic_regression": "LOGISTIC_REGRESSION",
+    "random_forest_classifier": "RANDOM_FOREST_CLASSIFIER",
+    "decision_tree_classifier": "DECISION_TREE_CLASSIFIER",
 }
 
 class Token:

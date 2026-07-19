@@ -121,11 +121,12 @@ class Parser:
             "FOR": self.parse_for, "CASE": self.parse_case,
             "CAST": self.parse_cast, "SAMPLE": self.parse_sample,
             "STATS": self.parse_stats, "CHART": self.parse_chart,
+            "TRAIN": self.parse_train, "PREDICT": self.parse_predict,
         }
         if token.type in type_map:
             return type_map[token.type]()
         raise ParserError(f"Unknown command: '{token.value}'", token.line, token.column,
-                         hint="Valid commands: read, filter, select, sort, mutate, write, chart, etc.")
+                         hint="Valid commands: read, filter, select, sort, mutate, write, chart, train, predict, etc.")
 
     def parse_read(self):
         line = self.peek().line
@@ -136,8 +137,6 @@ class Parser:
             format_type = "json"
         elif source.endswith(".csv"):
             format_type = "csv"
-        elif source.endswith(".parquet"):
-            format_type = "parquet"
         else:
             format_type = "csv"
         alias = None
@@ -495,6 +494,32 @@ class Parser:
             self.consume("AS")
             alias = self.consume("IDENTIFIER").value
         return ChartStep(input_ref, chart_type, label_col, value_col, title, target, alias, line)
+
+    def parse_train(self):
+        line = self.peek().line
+        self.consume("TRAIN")
+        input_ref = self.consume("IDENTIFIER").value
+        self.consume("PREDICT")
+        target_col = self.consume("IDENTIFIER").value
+        self.consume("USING")
+        model_type = self.peek().value
+        self.consume()
+        self.consume("AS")
+        model_name = self.consume("IDENTIFIER").value
+        return TrainStep(input_ref, target_col, model_type, model_name, None, line)
+
+    def parse_predict(self):
+        line = self.peek().line
+        self.consume("PREDICT")
+        input_ref = self.consume("IDENTIFIER").value
+        self.consume("USING")
+        model_name = self.consume("IDENTIFIER").value
+        output_col = "prediction"
+        alias = None
+        if self.peek() and self.peek().type == "AS":
+            self.consume("AS")
+            alias = self.consume("IDENTIFIER").value
+        return PredictStep(input_ref, model_name, output_col, alias, line)
 
     # ============ EXPRESSIONS ============
 

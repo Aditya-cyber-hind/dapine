@@ -24,6 +24,8 @@ class Runtime:
         self.variables = {}
         self.functions = {}
         self.pipelines = {}
+        self.ml_engine = None
+        self.db_engine = None
 
     def log_lineage(self, target, source, transformation):
         entry = f"[{target}] <- {transformation} <- [{source}]"
@@ -62,6 +64,8 @@ class Runtime:
         elif isinstance(step, StatsStep): return self.execute_stats(step)
         elif isinstance(step, IfStep): return self.execute_if(step)
         elif isinstance(step, ChartStep): return self.execute_chart(step)
+        elif isinstance(step, TrainStep): return self.execute_train(step)
+        elif isinstance(step, PredictStep): return self.execute_predict(step)
         return None
 
     def execute_read(self, step):
@@ -426,6 +430,43 @@ class Runtime:
         engine.generate_chart(step.input_ref, step.chart_type, step.label_col, step.value_col, step.title, step.target)
         return None
 
+    def execute_train(self, step):
+        from ml_engine import MLEngine
+        if self.ml_engine is None:
+            self.ml_engine = MLEngine()
+        
+        df = self.get_df(step.input_ref, step.line)
+        result = self.ml_engine.train(df, step.target_col, step.model_type, step.model_name)
+        
+        print(f"\n  🤖 Model Trained: {step.model_name}")
+        print(f"  {'─'*50}")
+        print(f"  Type: {result.get('model_type')}")
+        print(f"  Features: {', '.join(result.get('features', []))}")
+        print(f"  Target: {result.get('target')}")
+        print(f"  Train rows: {result.get('train_rows')}")
+        print(f"  Test rows: {result.get('test_rows')}")
+        print(f"  Metrics: {json.dumps(result.get('metrics', {}), indent=2)}")
+        print(f"  {'─'*50}\n")
+        return None
+
+    def execute_predict(self, step):
+        from ml_engine import MLEngine
+        if self.ml_engine is None:
+            self.ml_engine = MLEngine()
+        
+        df = self.get_df(step.input_ref, step.line)
+        new_rows, new_schema = self.ml_engine.predict(df, step.model_name, step.output_col)
+        
+        if new_rows is None:
+            print(f"Error: {new_schema.get('error')}")
+            return None
+        
+        name = step.alias or f"_df_{len(self.dataframes)}"
+        new_df = DataFrame(new_rows, new_schema, f"predict using {step.model_name}")
+        self.dataframes[name] = new_df
+        self.log_lineage(name, step.input_ref, f"PREDICT using {step.model_name}")
+        print(f"  ✅ Predictions added as column: {step.output_col}")
+        return new_df
     # ============ TYPE INFERENCE ============
 
     def _infer_type(self, value):
