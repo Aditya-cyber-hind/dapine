@@ -73,6 +73,12 @@ class Repl:
         if command == "/exit" or command == "/quit":
             print(f"{Colors.CYAN}Goodbye! 👋{Colors.RESET}")
             sys.exit(0)
+        elif command == "/ai" or command == "/ask":
+            if len(parts) > 1:
+                query = " ".join(parts[1:])
+                self.ai_query(query)
+            else:
+                print(f"{Colors.RED}Usage: /ai your question here{Colors.RESET}")
         
         elif command == "/help":
             print_banner()
@@ -150,7 +156,34 @@ class Repl:
             print(f"{Colors.RED}File not found: {filename}{Colors.RESET}")
         except DapineError as e:
             print(f"\n{Colors.RED}{e}{Colors.RESET}")
-    
+    def ai_query(self, query):
+        """Handle natural language query."""
+        from ai_engine import AIEngine
+        
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        ai = AIEngine(api_key)
+        
+        # Find first available table
+        table_name = "raw"
+        if self.runtime.dataframes:
+            table_name = list(self.runtime.dataframes.keys())[0]
+        
+        schema = []
+        if table_name in self.runtime.dataframes:
+            schema = self.runtime.dataframes[table_name].schema
+        
+        print(f"\n  🤖 AI: Understanding '{query}'...")
+        dapine_code = ai.nl_to_dapine(query, schema, table_name)
+        print(f"  📝 Generated Dapine:\n  {'─'*40}")
+        for line in dapine_code.split('\n'):
+            print(f"  {line}")
+        print(f"  {'─'*40}\n")
+        
+        # Execute each line
+        for line in dapine_code.split('\n'):
+            line = line.strip()
+            if line:
+                self.execute_line(line)    
     def execute_line(self, line):
         try:
             source = line

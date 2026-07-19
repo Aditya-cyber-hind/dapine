@@ -54,11 +54,6 @@ class Runtime:
             duck = self._get_duck()
             duck.register_df(name, df.rows, df.schema)
 
-    def _duck_to_df(self, table_name, lineage=""):
-        duck = self._get_duck()
-        rows, schema = duck._table_to_rows(table_name)
-        return DataFrame(rows, schema, lineage)
-
     # ============ STEP EXECUTION ============
 
     def execute_step(self, step):
@@ -163,16 +158,20 @@ class Runtime:
 
     def execute_filter(self, step):
         if self.use_duckdb and step.input_ref in self.dataframes:
-            self._df_to_duck(step.input_ref)
-            duck = self._get_duck()
-            alias = step.alias or f"_tbl_{len(self.dataframes)}"
-            cond_str = self._condition_to_sql(step.condition)
-            duck.conn.execute(f"CREATE OR REPLACE TABLE {alias} AS SELECT * FROM {step.input_ref} WHERE {cond_str}")
-            df = self._duck_to_df(alias, f"filter from {step.input_ref}")
-            name = step.alias or f"_df_{len(self.dataframes)}"
-            self.dataframes[name] = df
-            self.log_lineage(name, step.input_ref, "FILTER")
-            return df
+            try:
+                self._df_to_duck(step.input_ref)
+                duck = self._get_duck()
+                alias = step.alias or f"_tbl_{len(self.dataframes)}"
+                cond_str = self._condition_to_sql(step.condition)
+                duck.conn.execute(f"CREATE OR REPLACE TABLE {alias} AS SELECT * FROM {step.input_ref} WHERE {cond_str}")
+                rows, schema = duck._table_to_rows(alias)
+                name = step.alias or f"_df_{len(self.dataframes)}"
+                df = DataFrame(rows, schema, f"filter from {step.input_ref}")
+                self.dataframes[name] = df
+                self.log_lineage(name, step.input_ref, "FILTER")
+                return df
+            except:
+                pass  # Fall through to Python engine
         
         df = self.get_df(step.input_ref, step.line)
         filtered = []
@@ -197,6 +196,12 @@ class Runtime:
 
     def _cond_to_sql_part(self, expr):
         if isinstance(expr, Identifier):
+            if expr.name in self.variables:
+                val = self.variables[expr.name]
+                if isinstance(val, str): return f"'{val}'"
+                elif isinstance(val, (int, float)): return str(val)
+                elif isinstance(val, bool): return "TRUE" if val else "FALSE"
+                elif val is None: return "NULL"
             return f'"{expr.name}"'
         elif isinstance(expr, ColumnRef):
             return f'"{expr.column}"'
@@ -204,6 +209,10 @@ class Runtime:
             return f"'{expr.value}'"
         elif isinstance(expr, NumberLiteral):
             return str(expr.value)
+        elif isinstance(expr, BooleanLiteral):
+            return "TRUE" if expr.value else "FALSE"
+        elif isinstance(expr, NullLiteral):
+            return "NULL"
         return "NULL"
 
     def execute_select(self, step):
@@ -285,7 +294,7 @@ class Runtime:
         else:
             raise RuntimeError(f"Unsupported write format: {step.format_type}", step.line)
         self.log_lineage(step.target, step.input_ref, f"WRITE {step.format_type}")
-        print(f"✓ Written {len(df.rows)} rows to {step.target}")
+        print(f"Written {len(df.rows)} rows to {step.target}")
 
     def execute_sort(self, step):
         df = self.get_df(step.input_ref, step.line)
@@ -369,14 +378,14 @@ class Runtime:
 
     def execute_print(self, step):
         df = self.get_df(step.input_ref, step.line)
-        print(f"\n  📊 {step.input_ref}: {len(df.rows)} rows × {len(df.schema)} cols")
+        print(f"\n  {step.input_ref}: {len(df.rows)} rows x {len(df.schema)} cols")
         print(f"  Columns: {', '.join(df.schema)}")
-        print(f"  {'─'*50}")
+        print(f"  {'-'*50}")
         for row in df.rows[:20]:
             print(f"  {row}")
         if len(df.rows) > 20:
             print(f"  ... and {len(df.rows)-20} more rows")
-        print(f"  {'─'*50}\n")
+        print(f"  {'-'*50}\n")
         return df
 
     def execute_cast(self, step):
@@ -391,12 +400,11 @@ class Runtime:
                 elif step.new_type == "bool": row[step.column] = bool(val)
                 elif step.new_type == "date":
                     if isinstance(val, str): row[step.column] = date.fromisoformat(val)
-            except Exception as e:
-                raise RuntimeError(f"Cast failed: {e}", step.line)
+            except: pass
         name = step.alias or f"_df_{len(self.dataframes)}"
         new_df = DataFrame(list(df.rows), df.schema, f"cast {step.column} to {step.new_type}")
         self.dataframes[name] = new_df
-        self.log_lineage(name, step.input_ref, f"CAST {step.column} → {step.new_type}")
+        self.log_lineage(name, step.input_ref, f"CAST {step.column} -> {step.new_type}")
         return new_df
 
     def execute_sample(self, step):
@@ -411,8 +419,8 @@ class Runtime:
 
     def execute_stats(self, step):
         df = self.get_df(step.input_ref, step.line)
-        print(f"\n  📈 STATS: {step.input_ref} ({len(df.rows)} rows)")
-        print(f"  {'─'*50}")
+        print(f"\n  STATS: {step.input_ref} ({len(df.rows)} rows)")
+        print(f"  {'-'*50}")
         for col in df.schema:
             values = []
             for r in df.rows:
@@ -425,15 +433,14 @@ class Runtime:
                     print(f"  {col}: value={values[0]}")
             else:
                 print(f"  {col}: (non-numeric)")
-        print(f"  {'─'*50}\n")
+        print(f"  {'-'*50}\n")
         return df
 
     def execute_for(self, step):
         df = self.get_df(step.input_ref, step.line)
         for row in df.rows:
             self.variables[step.row_var] = row
-            for s in step.body:
-                self.execute_step(s)
+            for s in step.body: self.execute_step(s)
         return df
 
     def execute_case(self, step):
@@ -468,12 +475,12 @@ class Runtime:
         if self.ml_engine is None: self.ml_engine = MLEngine()
         df = self.get_df(step.input_ref, step.line)
         result = self.ml_engine.train(df, step.target_col, step.model_type, step.model_name)
-        print(f"\n  🤖 Model Trained: {step.model_name}")
-        print(f"  {'─'*50}")
+        print(f"\n  Model Trained: {step.model_name}")
+        print(f"  {'-'*50}")
         for k, v in result.items():
             if k != "metrics": print(f"  {k}: {v}")
         print(f"  Metrics: {json.dumps(result.get('metrics', {}), indent=2)}")
-        print(f"  {'─'*50}\n")
+        print(f"  {'-'*50}\n")
         return None
 
     def execute_predict(self, step):
@@ -488,14 +495,14 @@ class Runtime:
         new_df = DataFrame(new_rows, new_schema, f"predict using {step.model_name}")
         self.dataframes[name] = new_df
         self.log_lineage(name, step.input_ref, f"PREDICT using {step.model_name}")
+        print(f"  Predictions added as column: {step.output_col}")
         return new_df
 
     def execute_db_read(self, step):
         from connectors import Connectors
-        conn = Connectors()
-        rows, columns = conn.read_database(step.connection_string, step.query, step.alias)
+        rows, columns = Connectors().read_database(step.connection_string, step.query, step.alias)
         name = step.alias or f"_df_{len(self.dataframes)}"
-        df = DataFrame(rows, columns, f"db read")
+        df = DataFrame(rows, columns, "db read")
         self.dataframes[name] = df
         self.log_lineage(name, "database", "DB READ")
         return df
@@ -503,15 +510,13 @@ class Runtime:
     def execute_db_write(self, step):
         from connectors import Connectors
         df = self.get_df(step.input_ref, step.line)
-        conn = Connectors()
-        conn.write_database(df.rows, df.schema, step.connection_string, step.table_name)
-        print(f"✓ Written {len(df.rows)} rows to database table '{step.table_name}'")
+        Connectors().write_database(df.rows, df.schema, step.connection_string, step.table_name)
+        print(f"Written {len(df.rows)} rows to database table '{step.table_name}'")
         self.log_lineage(step.table_name, step.input_ref, "DB WRITE")
 
     def execute_excel_read(self, step):
         from connectors import Connectors
-        conn = Connectors()
-        rows, columns = conn.read_excel(step.source, step.sheet_name)
+        rows, columns = Connectors().read_excel(step.source, step.sheet_name)
         name = step.alias or f"_df_{len(self.dataframes)}"
         df = DataFrame(rows, columns, f"excel read from {step.source}")
         self.dataframes[name] = df
@@ -521,9 +526,8 @@ class Runtime:
     def execute_excel_write(self, step):
         from connectors import Connectors
         df = self.get_df(step.input_ref, step.line)
-        conn = Connectors()
-        conn.write_excel(df.rows, df.schema, step.target, step.sheet_name)
-        print(f"✓ Written {len(df.rows)} rows to {step.target}")
+        Connectors().write_excel(df.rows, df.schema, step.target, step.sheet_name)
+        print(f"Written {len(df.rows)} rows to {step.target}")
         self.log_lineage(step.target, step.input_ref, "EXCEL WRITE")
 
     def execute_report(self, step):
@@ -566,16 +570,14 @@ class Runtime:
     def _eval_func_call(self, expr, row):
         if expr.name in self.functions:
             func = self.functions[expr.name]
-            saved_vars = dict(self.variables)
-            for i, param in enumerate(func.params):
+            saved = dict(self.variables)
+            for i, p in enumerate(func.params):
                 if i < len(expr.args):
-                    self.variables[param] = self._eval_atomic(expr.args[i], row)
+                    self.variables[p] = self._eval_atomic(expr.args[i], row)
             result = self._eval_atomic(func.body_expr, row)
-            self.variables = saved_vars
+            self.variables = saved
             return result
-
         args = [self._eval_atomic(a, row) for a in expr.args]
-        
         if expr.name == "upper": return str(args[0]).upper() if args[0] is not None else ""
         elif expr.name == "lower": return str(args[0]).lower() if args[0] is not None else ""
         elif expr.name == "length": return len(str(args[0])) if args[0] is not None else 0
@@ -587,62 +589,39 @@ class Runtime:
         elif expr.name == "floor": return math.floor(args[0]) if args[0] is not None else None
         elif expr.name == "sqrt": return math.sqrt(args[0]) if args[0] is not None and args[0] >= 0 else None
         elif expr.name == "pow": return math.pow(args[0], args[1]) if len(args)>1 else None
-        elif expr.name == "year": return args[0].year if isinstance(args[0], date) else None
-        elif expr.name == "month": return args[0].month if isinstance(args[0], date) else None
-        elif expr.name == "day": return args[0].day if isinstance(args[0], date) else None
         elif expr.name == "today": return date.today()
         elif expr.name == "now": return datetime.now()
-        elif expr.name == "date_add":
-            if len(args)>=2 and isinstance(args[0], date): return args[0] + timedelta(days=args[1])
-        elif expr.name == "date_diff":
-            if len(args)>=2 and isinstance(args[0], date) and isinstance(args[1], date): return (args[0]-args[1]).days
-        elif expr.name == "date_format":
-            if len(args)>=2 and isinstance(args[0], date): return args[0].strftime(str(args[1]))
-        elif expr.name == "day_name": return args[0].strftime("%A") if isinstance(args[0], date) else None
-        elif expr.name == "month_name": return args[0].strftime("%B") if isinstance(args[0], date) else None
         return None
 
     def eval_condition(self, expr, row):
         if isinstance(expr, BinaryOp):
             left = self._eval_atomic(expr.left, row)
             right = self._eval_atomic(expr.right, row)
-            if expr.op == "contains": return str(left).find(str(right)) >= 0 if left and right else False
-            if expr.op == "starts_with": return str(left).startswith(str(right)) if left and right else False
-            if expr.op == "ends_with": return str(left).endswith(str(right)) if left and right else False
-            if expr.op == "matches":
-                import re
-                try: return bool(re.search(str(right), str(left))) if left and right else False
-                except: return False
+            if expr.op in ("contains", "starts_with", "ends_with", "matches"):
+                if not left or not right: return False
+                if expr.op == "contains": return str(right) in str(left)
+                if expr.op == "starts_with": return str(left).startswith(str(right))
+                if expr.op == "ends_with": return str(left).endswith(str(right))
             if expr.op == "is": return left is None
             if expr.op == "is_not": return left is not None
-            if left is None and right is None:
-                return expr.op == "=="
-            if left is None or right is None:
-                return expr.op == "!="
+            if left is None and right is None: return expr.op == "=="
+            if left is None or right is None: return expr.op == "!="
             left, right = self._coerce_types(left, right)
-            if expr.op == "==": return left == right
-            if expr.op == "!=": return left != right
-            if expr.op == ">": return left > right
-            if expr.op == "<": return left < right
-            if expr.op == ">=": return left >= right
-            if expr.op == "<=": return left <= right
-            if expr.op == "and": return left and right
-            if expr.op == "or": return left or right
-        else:
-            return self._eval_atomic(expr, row)
+            ops = {"==": lambda a,b: a==b, "!=": lambda a,b: a!=b, ">": lambda a,b: a>b,
+                   "<": lambda a,b: a<b, ">=": lambda a,b: a>=b, "<=": lambda a,b: a<=b,
+                   "and": lambda a,b: a and b, "or": lambda a,b: a or b}
+            if expr.op in ops: return ops[expr.op](left, right)
+        return self._eval_atomic(expr, row)
 
     def eval_arithmetic(self, expr, row):
         if isinstance(expr, ArithOp):
             left = self._eval_atomic(expr.left, row) or 0
             right = self._eval_atomic(expr.right, row) or 0
-            if expr.op == "+":
-                if isinstance(left, str) or isinstance(right, str): return str(left) + str(right)
-                return left + right
+            if expr.op == "+": return str(left)+str(right) if isinstance(left,str) or isinstance(right,str) else left+right
             if expr.op == "-": return left - right
             if expr.op == "*": return left * right
             if expr.op == "/": return left / right if right != 0 else None
-        else:
-            return self._eval_atomic(expr, row)
+        return self._eval_atomic(expr, row)
 
     def _coerce_types(self, left, right):
         if isinstance(left, date) and isinstance(right, str):

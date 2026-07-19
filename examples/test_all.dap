@@ -1,105 +1,133 @@
 func double(x) = x * 2
 func triple(x) = x * 3
-func ppsf(price, sqft) = price / sqft
-func luxury(bed, bath, sqft) = (bed * 100) + (bath * 50) + (sqft / 10)
+func ppsf(p, s) = p / s
+func luxury(bed, bath, sq) = (bed * 100) + (bath * 50) + (sq / 10)
+func half(x) = x / 2
+func add_hundred(x) = x + 100
 
-pipeline dapine_full_benchmark() {
+pipeline dapine_ultimate_strength_test() {
 
-    // ===== LOAD DATA =====
+    // ===== 1. READ (auto-detect) =====
     read "houses.csv" as raw
+
+    // ===== 2. PRINT =====
     print raw
+
+    // ===== 3. STATS =====
     stats raw
 
-    // ===== VARIABLES =====
-    let min_price = 250000
-    let max_budget = 600000
+    // ===== 4-7. LET VARIABLES =====
+    let min_price = 200000
+    let max_price = 600000
+    let target_beds = 3
+    let bonus = 100000
 
-    // ===== ALL FILTERS =====
-    filter raw where price >= min_price and price <= max_budget as in_budget
-    filter in_budget where bedrooms >= 3 as big
-    filter big where bathrooms > 1 as nice
-    filter nice where sqft != 1000 as clean
+    // ===== 8-15. ALL FILTERS =====
+    filter raw where price >= min_price and price <= max_price as in_range
+    filter in_range where bedrooms >= target_beds as big_enough
+    filter big_enough where bathrooms >= 2 as nice
+    filter nice where sqft > 1000 as spacious
+    filter spacious where price != 350000 as not_exact
+    filter not_exact where bedrooms > 2 or bathrooms > 2 as either_or
+    filter raw where price == 300000 as exact_price
+    filter raw where price < 400000 as affordable
 
-    // ===== ALL MUTATIONS =====
-    mutate clean add doubled = double(price) as m1
+    // ===== 16-17. SORT =====
+    sort either_or by price desc as by_price_desc
+    sort either_or by sqft asc as by_sqft_asc
+
+    // ===== 18. LIMIT =====
+    limit by_price_desc 5 as top5
+
+    // ===== 19-38. ALL MUTATIONS =====
+    mutate top5 add doubled = double(price) as m1
     mutate m1 add tripled = triple(sqft) as m2
     mutate m2 add price_per_sqft = ppsf(price, sqft) as m3
-    mutate m3 add score = luxury(bedrooms, bathrooms, sqft) as m4
-    mutate m4 add millions = price / 1000000 as m5
-    mutate m5 add bed_sq = bedrooms * bedrooms as m6
-    mutate m6 add ppb = price / bedrooms as m7
-    mutate m7 add root_sqft = sqrt(sqft) as m8
-    mutate m8 add r_ppsf = round(price_per_sqft) as m9
-    mutate m9 add f_ppsf = floor(price_per_sqft) as m10
-    mutate m10 add c_ppsf = ceil(price_per_sqft) as m11
-    mutate m11 add abs_diff = abs(price - 400000) as m12
+    mutate m3 add luxury_score = luxury(bedrooms, bathrooms, sqft) as m4
+    mutate m4 add half_price = half(price) as m5
+    mutate m5 add bonus_price = add_hundred(price) + bonus as m6
+    mutate m6 add millions = price / 1000000 as m7
+    mutate m7 add bed_squared = bedrooms * bedrooms as m8
+    mutate m8 add ppb = price / bedrooms as m9
+    mutate m9 add root_sqft = sqrt(sqft) as m10
+    mutate m10 add rounded = round(price_per_sqft) as m11
+    mutate m11 add floored = floor(price_per_sqft) as m12
+    mutate m12 add ceiled = ceil(price_per_sqft) as m13
+    mutate m13 add abs_diff = abs(price - 400000) as m14
+    mutate m14 add label = concat("House_", bedrooms, "BR_", bathrooms, "BA") as m15
+    mutate m15 add upper_label = upper(label) as m16
+    mutate m16 add lower_label = lower(label) as m17
+    mutate m17 add label_length = length(label) as m18
+    mutate m18 add trimmed_label = trim(label) as m19
+    mutate m19 add greeting = concat("This ", bedrooms, " bed home costs $", price) as m20
 
-    // ===== STRING OPS =====
-    mutate m12 add label = concat("Home ", bedrooms, "BR ", bathrooms, "BA") as m13
-    mutate m13 add upper_lbl = upper(label) as m14
-    mutate m14 add lower_lbl = lower(label) as m15
-    mutate m15 add lbl_len = length(label) as m16
-    mutate m16 add trimmed_lbl = trim(label) as m17
+    // ===== 39. RENAME =====
+    rename m20 bedrooms to beds, bathrooms to baths, price to cost, sqft to square_feet as renamed
 
-    // ===== RENAME & SELECT =====
-    rename m17 bedrooms to beds, bathrooms to baths, price to cost as renamed
-    select label, beds, baths, sqft, cost, price_per_sqft, score, millions, ppb, root_sqft, r_ppsf, f_ppsf, c_ppsf, abs_diff from renamed as selected
+    // ===== 40. SELECT =====
+    select label, beds, baths, square_feet, cost, price_per_sqft, luxury_score, millions, ppb, root_sqft, rounded, floored, ceiled, abs_diff, greeting from renamed as selected
 
-    // ===== CASTING =====
+    // ===== 41-43. CAST =====
     cast selected beds as string as c1
     cast c1 millions as float as c2
     cast c2 label as string as c3
 
-    // ===== SORTING =====
-    sort c3 by score desc as by_luxury
-    sort c3 by price_per_sqft asc as by_ppsf
-    sort c3 by cost desc as by_price
+    // ===== 44-46. SORT VARIOUS =====
+    sort c3 by luxury_score desc as by_luxury
+    sort c3 by price_per_sqft asc as best_value
+    sort c3 by cost desc as most_expensive
 
-    // ===== LIMIT & SAMPLE =====
-    limit by_luxury 3 as top3
-    sample by_price 50% as sampled
+    // ===== 47-48. LIMIT & SAMPLE =====
+    limit by_luxury 3 as top3_luxury
+    sample most_expensive 50% as random_pick
 
-    // ===== DISTINCT =====
-    distinct top3 as unique_top
+    // ===== 49. DISTINCT =====
+    distinct top3_luxury as unique_homes
 
-    // ===== GROUP BY =====
+    // ===== 50. GROUP BY WITH ALL AGGREGATIONS =====
     group c3 by beds [
-        count(label) as homes,
+        count(label) as total_homes,
         sum(cost) as total_cost,
         avg(cost) as avg_cost,
         min(cost) as cheapest,
-        max(cost) as priciest,
+        max(cost) as most_expensive,
         avg(price_per_sqft) as avg_ppsf
     ] as grouped
 
-    sort grouped by homes desc as final
+    sort grouped by total_homes desc as final_grouped
 
-    // ===== MACHINE LEARNING =====
-    train raw predict price using linear_regression as lr_model
-    train raw predict price using random_forest as rf_model
-    train raw predict price using decision_tree as dt_model
+    // ===== 51-53. MACHINE LEARNING (3 MODELS) =====
+    train raw predict price using linear_regression as lr
+    train raw predict price using random_forest as rf
+    train raw predict price using decision_tree as dt
 
-    predict raw using lr_model as lr_pred
-    predict raw using rf_model as rf_pred
-    predict raw using dt_model as dt_pred
+    // ===== 54-56. PREDICT WITH ALL MODELS =====
+    predict raw using lr as lr_predicted
+    predict raw using rf as rf_predicted
+    predict raw using dt as dt_predicted
 
-    select bedrooms, bathrooms, sqft, price, prediction from dt_pred as ml_results
+    // ===== 57. SELECT ML RESULTS =====
+    select bedrooms, bathrooms, sqft, price, prediction from dt_predicted as ml_results
 
-    // ===== OUTPUTS =====
-    print final
+    // ===== 58-59. PRINT RESULTS =====
+    print final_grouped
     print ml_results
 
-    write final into "benchmark_results.json"
-    write final into "benchmark_results.csv"
-    excel write final into "benchmark_results.xlsx"
-    report final as "Dapine Benchmark Report" into "benchmark_report.md"
-
+    // ===== 60-62. WRITE JSON/CSV =====
+    write final_grouped into "final_report.json"
+    write final_grouped into "final_report.csv"
     write ml_results into "ml_predictions.json"
-    write ml_results into "ml_predictions.csv"
+
+    // ===== 63-64. EXCEL OUTPUTS =====
+    excel write final_grouped into "final_report.xlsx"
     excel write ml_results into "ml_predictions.xlsx"
 
-    chart final homes by beds as bar into "benchmark_bar.html"
-    chart final avg_cost by beds as line into "benchmark_line.html"
-    chart ml_results price by bedrooms as scatter into "ml_scatter.html"
+    // ===== 65. MARKDOWN REPORT =====
+    report final_grouped as "Dapine Ultimate Strength Test Results" into "final_report.md"
+
+    // ===== 66-68. CHARTS =====
+    chart final_grouped total_homes by beds as bar into "homes_by_bedrooms.html"
+    chart final_grouped avg_cost by beds as line into "avg_price_by_bedrooms.html"
+    chart ml_results price by sqft as scatter into "price_vs_sqft.html"
 
 }
