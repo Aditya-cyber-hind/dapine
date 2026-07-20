@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dapine Playground</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', monospace; background: #0d1117; color: #c9d1d9; height: 100vh; display: flex; }
+        
+        .sidebar { width: 280px; background: #161b22; padding: 15px; border-right: 1px solid #30363d; overflow-y: auto; }
+        .sidebar h2 { color: #e94560; margin-bottom: 15px; font-size: 20px; }
+        .sidebar h3 { color: #58a6ff; margin: 15px 0 8px; font-size: 14px; }
+        .file-item { padding: 8px 12px; cursor: pointer; border-radius: 6px; margin: 2px 0; font-size: 13px; transition: all 0.2s; }
+        .file-item:hover { background: #1f2937; }
+        .file-item.active { background: #1f6feb33; border: 1px solid #1f6feb; }
+        
+        .main { flex: 1; display: flex; flex-direction: column; }
+        .toolbar { padding: 10px 20px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; gap: 10px; align-items: center; }
+        .btn { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: all 0.2s; }
+        .btn-run { background: #238636; color: white; }
+        .btn-run:hover { background: #2ea043; }
+        .btn-chart { background: #1f6feb; color: white; }
+        .btn-chart:hover { background: #388bfd; }
+        .btn-export { background: #6e7681; color: white; }
+        .btn-share { background: #9c41f2; color: white; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        
+        .editor-area { flex: 1; display: flex; flex-direction: column; padding: 15px; gap: 15px; }
+        .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+        .panel-header { padding: 8px 15px; background: #1c2333; border-bottom: 1px solid #30363d; font-size: 12px; color: #8b949e; }
+        .data-input, .code-input { width: 100%; min-height: 120px; background: #0d1117; color: #c9d1d9; border: none; padding: 12px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; resize: vertical; }
+        .code-input { min-height: 200px; }
+        .output { flex: 1; min-height: 150px; padding: 12px; background: #0d1117; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #7ee787; }
+        .output .error { color: #f85149; }
+        .output .warn { color: #d2991d; }
+        .output .info { color: #58a6ff; }
+        .output .success { color: #7ee787; }
+        
+        .status { font-size: 12px; color: #8b949e; margin-left: auto; }
+        .row-count { background: #1f6feb22; padding: 3px 10px; border-radius: 12px; font-size: 11px; color: #58a6ff; }
+        
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>🚀 Dapine</h2>
+        <p style="font-size:11px;color:#8b949e;margin-bottom:10px;">Data Pipeline Playground</p>
+        
+        <h3>📂 Sample Data</h3>
+        <div class="file-item active" onclick="loadSample('houses')">🏠 Houses</div>
+        <div class="file-item" onclick="loadSample('users')">👤 Users</div>
+        <div class="file-item" onclick="loadSample('sales')">💰 Sales</div>
+        
+        <h3>📝 Sample Pipelines</h3>
+        <div class="file-item" onclick="loadPipeline('basic')">🔍 Basic Filter</div>
+        <div class="file-item" onclick="loadPipeline('group')">📊 Group By</div>
+        <div class="file-item" onclick="loadPipeline('ml')">🤖 ML Predict</div>
+        <div class="file-item" onclick="loadPipeline('full')">🔥 Full Power</div>
+        
+        <h3>🔗 Links</h3>
+        <div class="file-item" onclick="window.open('https://github.com/Aditya-cyber-hind/dapine')">⭐ GitHub</div>
+        
+        <p style="font-size:10px;color:#484f58;margin-top:20px;">Built by a 13-year-old 🚀</p>
+    </div>
+    
+    <div class="main">
+        <div class="toolbar">
+            <button class="btn btn-run" onclick="runDapine()">▶ Run</button>
+            <button class="btn btn-chart" onclick="showChart()">📊 Chart</button>
+            <button class="btn btn-export" onclick="exportCSV()">📥 Export CSV</button>
+            <button class="btn btn-share" onclick="shareCode()">🔗 Share</button>
+            <span class="status" id="status">Ready</span>
+        </div>
+        
+        <div class="editor-area">
+            <div class="panel">
+                <div class="panel-header">📂 Data (CSV format) — paste your data here</div>
+                <textarea class="data-input" id="dataInput" placeholder="name,age,city&#10;Alice,25,NYC&#10;Bob,17,LA">name,age,city
+Alice,25,NYC
+Bob,17,LA
+Charlie,30,NYC
+Diana,22,Chicago
+Eve,19,LA</textarea>
+            </div>
+            
+            <div class="panel" style="flex:2;">
+                <div class="panel-header">📝 Dapine Code <span class="row-count" id="rowCount"></span></div>
+                <textarea class="code-input" id="codeInput" placeholder="read &quot;data&quot; as raw&#10;print raw&#10;filter raw where age > 18 as adults&#10;print adults">read "data" as raw
+print raw
+filter raw where age > 18 as adults
+print adults</textarea>
+            </div>
+            
+            <div class="panel" style="flex:2;">
+                <div class="panel-header">📤 Output</div>
+                <div class="output" id="output">Ready. Click ▶ Run to execute your pipeline.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // ============ DAPINE PLAYGROUND ENGINE ============
+        
+        let lastResult = null;
+        let lastSchema = null;
+        
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return { rows: [], columns: [] };
+            const columns = lines[0].split(',').map(c => c.trim());
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                const row = {};
+                columns.forEach((col, idx) => {
+                    let val = (values[idx] || '').trim();
+                    if (!isNaN(val) && val !== '') val = Number(val);
+                    if (val === 'true') val = true;
+                    if (val === 'false') val = false;
+                    if (val === '') val = null;
+                    row[col] = val;
+                });
+                rows.push(row);
+            }
+            return { rows, columns };
+        }
+        
+        function inferType(val) {
+            if (val === null || val === undefined) return 'null';
+            if (typeof val === 'boolean') return 'bool';
+            if (typeof val === 'number' && Number.isInteger(val)) return 'int';
+            if (typeof val === 'number') return 'float';
+            return 'string';
+        }
+        
+        function filterRows(rows, condition) {
+            return rows.filter(row => {
+                try {
+                    const cond = condition.replace(/(\w+)/g, (match) => {
+                        if (match in row) return JSON.stringify(row[match]);
+                        if (match === 'and') return '&&';
+                        if (match === 'or') return '||';
+                        return match;
+                    });
+                    return eval(cond);
+                } catch (e) {
+                    return true;
+                }
+            });
+        }
+        
+        function sortRows(rows, column, direction) {
+            return [...rows].sort((a, b) => {
+                const va = a[column], vb = b[column];
+                if (va === null) return 1;
+                if (vb === null) return -1;
+                const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+                return direction === 'desc' ? -cmp : cmp;
+            });
+        }
+        
+        function groupRows(rows, keyCol, aggs) {
+            const groups = {};
+            rows.forEach(row => {
+                const key = row[keyCol];
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(row);
+            });
+            
+            const result = [];
+            Object.entries(groups).forEach(([key, groupRows]) => {
+                const out = { [keyCol]: isNaN(key) ? key : Number(key) };
+                aggs.forEach(agg => {
+                    const [func, col] = agg.split('(').map(s => s.replace(')', ''));
+                    if (func === 'count') out[agg] = groupRows.length;
+                    else {
+                        const vals = groupRows.map(r => r[col]).filter(v => typeof v === 'number');
+                        if (func === 'sum') out[agg] = vals.reduce((a, b) => a + b, 0);
+                        if (func === 'avg') out[agg] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                        if (func === 'min') out[agg] = vals.length ? Math.min(...vals) : null;
+                        if (func === 'max') out[agg] = vals.length ? Math.max(...vals) : null;
+                    }
+                });
+                result.push(out);
+            });
+            return result;
+        }
+        
+        function executeDapine(code, dataRows, dataCols) {
+            const output = [];
+            let currentData = { rows: [...dataRows], columns: [...dataCols] };
+            let stepCount = 0;
+            
+            const lines = code.split('\n').filter(l => l.trim() && !l.trim().startsWith('//'));
+            
+            for (const line of lines) {
+                stepCount++;
+                const trimmed = line.trim();
+                
+                try {
+                    // READ
+                    if (trimmed.startsWith('read ')) {
+                        const alias = trimmed.split(' as ').pop().trim();
+                        output.push(`<span class="success">✅ Step ${stepCount}: read → ${currentData.rows.length} rows</span>`);
+                        continue;
+                    }
+                    
+                    // PRINT
+                    if (trimmed.startsWith('print ')) {
+                        const name = trimmed.replace('print ', '').trim();
+                        output.push(`\n<span class="info">📊 ${name}: ${currentData.rows.length} rows x ${currentData.columns.length} cols</span>`);
+                        output.push(`<span class="info">Columns: ${currentData.columns.join(', ')}</span>`);
+                        output.push(`<span class="info">${'─'.repeat(50)}</span>`);
+                        currentData.rows.slice(0, 20).forEach(row => {
+                            output.push(JSON.stringify(row));
+                        });
+                        if (currentData.rows.length > 20) output.push(`... and ${currentData.rows.length - 20} more`);
+                        output.push(`<span class="info">${'─'.repeat(50)}</span>\n`);
+                        lastResult = currentData.rows;
+                        lastSchema = currentData.columns;
+                        continue;
+                    }
+                    
+                    // STATS
+                    if (trimmed.startsWith('stats ')) {
+                        output.push(`\n<span class="info">📈 STATS: ${currentData.rows.length} rows</span>`);
+                        currentData.columns.forEach(col => {
+                            const vals = currentData.rows.map(r => r[col]).filter(v => typeof v === 'number');
+                            if (vals.length > 1) {
+                                const mean = vals.reduce((a,b) => a+b, 0) / vals.length;
+                                const sorted = [...vals].sort((a,b) => a-b);
+                                const median = sorted[Math.floor(sorted.length/2)];
+                                output.push(`  ${col}: min=${Math.min(...vals)}, max=${Math.max(...vals)}, mean=${mean.toFixed(2)}, median=${median.toFixed(2)}`);
+                            } else if (vals.length === 1) {
+                                output.push(`  ${col}: value=${vals[0]}`);
+                            } else {
+                                output.push(`  ${col}: (non-numeric)`);
+                            }
+                        });
+                        output.push('');
+                        continue;
+                    }
+                    
+                    // FILTER
+                    if (trimmed.startsWith('filter ')) {
+                        const match = trimmed.match(/filter \w+ where (.+) as \w+/);
+                        if (match) {
+                            const condition = match[1];
+                            const prevCount = currentData.rows.length;
+                            currentData.rows = filterRows(currentData.rows, condition);
+                            const newCount = currentData.rows.length;
+                            if (newCount === 0 && prevCount > 0) {
+                                output.push(`<span class="warn">⚠️ Step ${stepCount}: filter removed ALL ${prevCount} rows!</span>`);
+                            } else {
+                                output.push(`<span class="success">✅ Step ${stepCount}: filter → ${newCount} rows</span>`);
+                            }
+                        }
+                        continue;
+                    }
+                    
+                    // SORT
+                    if (trimmed.startsWith('sort ')) {
+                        const match = trimmed.match(/sort \w+ by (\w+) (asc|desc)/);
+                        if (match) {
+                            currentData.rows = sortRows(currentData.rows, match[1], match[2]);
+                            output.push(`<span class="success">✅ Step ${stepCount}: sort by ${match[1]} ${match[2]} → ${currentData.rows.length} rows</span>`);
+                        }
+                        continue;
+                    }
+                    
+                    // LIMIT
+                    if (trimmed.startsWith('limit ')) {
+                        const match = trimmed.match(/limit \w+ (\d+)/);
+                        if (match) {
+                            currentData.rows = currentData.rows.slice(0, parseInt(match[1]));
+                            output.push(`<span class="success">✅ Step ${stepCount}: limit → ${currentData.rows.length} rows</span>`);
+                        }
+                        continue;
+                    }
+                    
+                    // GROUP BY
+                    if (trimmed.startsWith('group ')) {
+                        const match = trimmed.match(/group \w+ by (\w+) \[(.+)\]/);
+                        if (match) {
+                            const aggs = match[2].split(',').map(a => a.trim());
+                            currentData.rows = groupRows(currentData.rows, match[1], aggs);
+                            currentData.columns = [match[1], ...aggs];
+                            output.push(`<span class="success">✅ Step ${stepCount}: group by ${match[1]} → ${currentData.rows.length} rows</span>`);
+                        }
+                        continue;
+                    }
+                    
+                    // MUTATE
+                    if (trimmed.startsWith('mutate ')) {
+                        const match = trimmed.match(/mutate \w+ add (\w+) = (.+) as \w+/);
+                        if (match) {
+                            const newCol = match[1];
+                            const expr = match[2];
+                            currentData.rows = currentData.rows.map(row => {
+                                const newRow = {...row};
+                                try {
+                                    let calc = expr.replace(/(\w+)/g, (m) => {
+                                        if (m in row) return row[m];
+                                        return m;
+                                    });
+                                    newRow[newCol] = eval(calc);
+                                } catch (e) {
+                                    newRow[newCol] = null;
+                                }
+                                return newRow;
+                            });
+                            if (!currentData.columns.includes(newCol)) currentData.columns.push(newCol);
+                            output.push(`<span class="success">✅ Step ${stepCount}: mutate add ${newCol} → ${currentData.rows.length} rows</span>`);
+                        }
+                        continue;
+                    }
+                    
+                    // SELECT
+                    if (trimmed.startsWith('select ')) {
+                        const match = trimmed.match(/select (.+) from \w+/);
+                        if (match) {
+                            const cols = match[1].split(',').map(c => c.trim());
+                            currentData.rows = currentData.rows.map(row => {
+                                const newRow = {};
+                                cols.forEach(c => { newRow[c] = row[c]; });
+                                return newRow;
+                            });
+                            currentData.columns = cols;
+                            output.push(`<span class="success">✅ Step ${stepCount}: select → ${currentData.rows.length} rows</span>`);
+                        }
+                        continue;
+                    }
+                    
+                } catch (err) {
+                    output.push(`<span class="error">❌ Step ${stepCount}: ${err.message}</span>`);
+                }
+            }
+            
+            return output.join('\n');
+        }
+        
+        function runDapine() {
+            const dataText = document.getElementById('dataInput').value;
+            const code = document.getElementById('codeInput').value;
+            const outputDiv = document.getElementById('output');
+            const status = document.getElementById('status');
+            
+            status.textContent = 'Running...';
+            status.style.color = '#d2991d';
+            
+            try {
+                const { rows, columns } = parseCSV(dataText);
+                if (rows.length === 0) {
+                    outputDiv.innerHTML = '<span class="error">Error: No data found. Paste CSV data in the Data panel.</span>';
+                    status.textContent = 'Error';
+                    status.style.color = '#f85149';
+                    return;
+                }
+                
+                const result = executeDapine(code, rows, columns);
+                outputDiv.innerHTML = result;
+                document.getElementById('rowCount').textContent = `${rows.length} rows`;
+                status.textContent = 'Done ✅';
+                status.style.color = '#7ee787';
+            } catch (err) {
+                outputDiv.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+                status.textContent = 'Error';
+                status.style.color = '#f85149';
+            }
+        }
+        
+        function showChart() {
+            if (!lastResult || lastResult.length === 0) {
+                alert('Run a pipeline first!');
+                return;
+            }
+            
+            const keys = Object.keys(lastResult[0]);
+            const numericCols = keys.filter(k => typeof lastResult[0][k] === 'number');
+            const labelCol = keys[0];
+            const valueCol = numericCols[0] || keys[1] || keys[0];
+            
+            const chartHTML = `
+                <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;z-index:999;padding:30px;">
+                    <div style="max-width:800px;margin:auto;">
+                        <h2 style="color:#e94560;">📊 Chart</h2>
+                        <canvas id="chartCanvas"></canvas>
+                        <button onclick="this.parentElement.parentElement.remove()" style="margin-top:15px;padding:10px 25px;background:#f85149;color:white;border:none;border-radius:6px;cursor:pointer;">Close</button>
+                    </div>
+                </div>
+                <script>
+                    new Chart(document.getElementById('chartCanvas'), {
+                        type: 'bar',
+                        data: {
+                            labels: ${JSON.stringify(lastResult.map(r => r[labelCol]))},
+                            datasets: [{
+                                label: '${valueCol}',
+                                data: ${JSON.stringify(lastResult.map(r => r[valueCol]))},
+                                backgroundColor: 'rgba(88, 166, 255, 0.7)',
+                                borderColor: '#58a6ff',
+                                borderWidth: 2,
+                                borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                            scales: {
+                                y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+                                x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }
+                            }
+                        }
+                    });
+                <\/script>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', chartHTML);
+        }
+        
+        function exportCSV() {
+            if (!lastResult || lastResult.length === 0) {
+                alert('Run a pipeline first!');
+                return;
+            }
+            const cols = Object.keys(lastResult[0]);
+            let csv = cols.join(',') + '\n';
+            lastResult.forEach(row => {
+                csv += cols.map(c => row[c] ?? '').join(',') + '\n';
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'dapine_export.csv'; a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function shareCode() {
+            const code = document.getElementById('codeInput').value;
+            const data = document.getElementById('dataInput').value;
+            const encoded = btoa(JSON.stringify({ code, data }));
+            const url = `${window.location.href.split('?')[0]}?share=${encoded}`;
+            navigator.clipboard.writeText(url).then(() => alert('Link copied! Share this URL.'));
+        }
+        
+        function loadSample(type) {
+            const samples = {
+                houses: { data: "bedrooms,bathrooms,sqft,price\n3,2,1500,300000\n4,3,2200,450000\n2,1,900,200000\n5,4,3000,600000\n3,2,1800,350000\n4,3,2500,500000\n2,2,1200,280000\n5,3,2800,550000\n3,1,1000,220000\n4,2,2000,400000", code: 'read "data" as raw\nprint raw\nstats raw\nfilter raw where price > 300000 as expensive\nprint expensive' },
+                users: { data: "name,age,city\nAlice,25,NYC\nBob,17,LA\nCharlie,30,NYC\nDiana,22,Chicago\nEve,19,LA", code: 'read "data" as raw\nprint raw\nfilter raw where age >= 18 as adults\ngroup adults by city [count(name) as users, avg(age) as avg_age] as report\nprint report' },
+                sales: { data: "product,quantity,price\nLaptop,5,1200\nPhone,10,800\nTablet,3,500\nLaptop,2,1200\nPhone,5,800", code: 'read "data" as raw\ngroup raw by product [sum(quantity) as total_qty, sum(price) as revenue] as report\nsort report by revenue desc as sorted\nprint sorted' }
+            };
+            if (samples[type]) {
+                document.getElementById('dataInput').value = samples[type].data;
+                document.getElementById('codeInput').value = samples[type].code;
+                document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+                event.target.classList.add('active');
+            }
+        }
+        
+        function loadPipeline(type) {
+            const pipelines = {
+                basic: 'read "data" as raw\nprint raw\nfilter raw where age > 18 as adults\nsort adults by age desc as sorted\nlimit sorted 3 as top\nprint top',
+                group: 'read "data" as raw\ngroup raw by city [count(name) as people, avg(age) as avg_age, min(age) as youngest, max(age) as oldest] as report\nsort report by people desc as final\nprint final',
+                ml: 'read "data" as raw\nprint raw\nstats raw\nfilter raw where price > 200000 as filtered\nmutate filtered add ppsf = price / sqft as with_metric\nsort with_metric by ppsf asc as best_value\nlimit best_value 5 as top5\nprint top5',
+                full: 'read "data" as raw\nprint raw\nstats raw\nfilter raw where price >= 200000 as budget\nfilter budget where bedrooms >= 3 as big\nmutate big add ppsf = price / sqft as m1\nmutate m1 add label = concat(bedrooms, "BR") as m2\ngroup m2 by bedrooms [count(label) as homes, avg(price) as avg_price] as report\nsort report by homes desc as final\nprint final'
+            };
+            if (pipelines[type]) {
+                document.getElementById('codeInput').value = pipelines[type];
+            }
+        }
+        
+        // Load shared code from URL
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const share = params.get('share');
+            if (share) {
+                try {
+                    const { code, data } = JSON.parse(atob(share));
+                    document.getElementById('codeInput').value = code;
+                    document.getElementById('dataInput').value = data;
+                } catch (e) {}
+            }
+        };
+        
+        // Keyboard shortcut
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                runDapine();
+            }
+        });
+    </script>
+</body>
+</html>
