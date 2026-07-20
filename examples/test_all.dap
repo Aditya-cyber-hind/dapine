@@ -1,46 +1,181 @@
+// =====================================================================
+// DAPINE ULTIMATE FULL FEATURE TEST - EVERYTHING WE EVER BUILT
+// =====================================================================
 func double(x) = x * 2
 func triple(x) = x * 3
+func ppsf(p, s) = p / s
+func luxury(b, ba, sq) = (b * 100) + (ba * 50) + (sq / 10)
+func half(x) = x / 2
+func add100(x) = x + 100
+func complex_calc(x, y, z) = (x * y) + (double(z) / 2)
 
-pipeline dapine_final_test() {
+pipeline dapine_everything_test() {
 
+    // ===== 1. READ LOCAL CSV (DuckDB backend) =====
     read "houses.csv" as raw
     print raw
     stats raw
 
-    http read "https://randomuser.me/api/?results=3" as json as users
-    print users
+    // ===== 2. READ LOCAL JSON =====
+    write raw into "temp_export.json"
 
+    // ===== 3. HTTP API READ (auto-flatten) =====
+    http read "https://randomuser.me/api/?results=2" as json as api_users
+    print api_users
+
+    // ===== 4. EXCEL READ =====
+    excel write raw into "temp_houses.xlsx"
+    excel read "temp_houses.xlsx" as from_excel
+    print from_excel
+
+    // ===== 5. LET VARIABLES =====
     let min_price = 200000
-    filter raw where price >= min_price as affordable
-    filter affordable where bedrooms >= 3 as big
-    filter big where bathrooms >= 2 as nice
+    let max_budget = 600000
+    let target_beds = 3
+    let bonus = 50000
+    let multiplier = 10
+    let name_prefix = "Home_"
 
-    mutate nice add doubled = double(price) as m1
-    mutate m1 add ppsf = price / sqft as m2
-    mutate m2 add label = concat("Home ", bedrooms, "BR ", bathrooms, "BA") as m3
+    // ===== 6. ALL FILTER OPERATORS =====
+    filter raw where price == 300000 as exact_match
+    filter raw where price != 350000 as not_equal
+    filter raw where price > 400000 as expensive
+    filter raw where price < 300000 as cheap
+    filter raw where price >= 200000 as at_least
+    filter raw where price <= 500000 as at_most
 
-    sort m3 by price desc as sorted
-    limit sorted 3 as top
+    // ===== 7. COMPOUND FILTERS =====
+    filter raw where price >= min_price and price <= max_budget as in_range
+    filter in_range where bedrooms >= target_beds or bathrooms >= 3 as big_or_nice
+    filter big_or_nice where sqft > 1000 as spacious
+    filter spacious where price != 350000 as clean_data
 
-    group m3 by bedrooms [
-        count(label) as homes,
-        avg(price) as avg_price,
-        min(price) as cheapest
+    // ===== 8. STRING FILTERS =====
+    filter raw where city contains "NY" as has_ny
+    filter raw where name starts_with "A" as a_names
+    filter raw where name ends_with "e" as ends_e
+
+    // ===== 9. SORT ASCENDING & DESCENDING =====
+    sort clean_data by price desc as by_price
+    sort clean_data by sqft asc as by_size
+    sort clean_data by bedrooms desc as by_beds
+
+    // ===== 10. LIMIT & SAMPLE =====
+    limit by_price 5 as top5
+    sample by_price 50% as random_sample
+
+    // ===== 11. DISTINCT =====
+    distinct top5 as unique_homes
+
+    // ===== 12. MUTATE - ARITHMETIC =====
+    mutate unique_homes add doubled = double(price) as m1
+    mutate m1 add tripled = triple(sqft) as m2
+    mutate m2 add price_per_sqft = ppsf(price, sqft) as m3
+    mutate m3 add luxury_score = luxury(bedrooms, bathrooms, sqft) as m4
+    mutate m4 add half_price = half(price) as m5
+    mutate m5 add with_bonus = add100(price) + bonus as m6
+    mutate m6 add complex = complex_calc(bedrooms, bathrooms, sqft) as m7
+    mutate m7 add millions = price / 1000000 as m8
+    mutate m8 add bed_squared = bedrooms * bedrooms as m9
+    mutate m9 add ppb = price / bedrooms as m10
+    mutate m10 add root_sqft = sqrt(sqft) as m11
+    mutate m11 add months = price / 12 as m12
+
+    // ===== 13. MUTATE - MATH FUNCTIONS =====
+    mutate m12 add abs_val = abs(price - 400000) as m13
+    mutate m13 add rounded = round(price_per_sqft) as m14
+    mutate m14 add floored = floor(price_per_sqft) as m15
+    mutate m15 add ceiled = ceil(price_per_sqft) as m16
+
+    // ===== 14. MUTATE - STRING FUNCTIONS =====
+    mutate m16 add label = concat(name_prefix, bedrooms, "BR_", bathrooms, "BA") as m17
+    mutate m17 add upper_lbl = upper(label) as m18
+    mutate m18 add lower_lbl = lower(label) as m19
+    mutate m19 add lbl_len = length(label) as m20
+    mutate m20 add trimmed = trim(label) as m21
+    mutate m21 add greeting = concat("This ", bedrooms, " bed costs $", price) as m22
+
+    // ===== 15. RENAME MULTIPLE COLUMNS =====
+    rename m22 bedrooms to beds, bathrooms to baths, price to cost, sqft to square_feet as renamed
+
+    // ===== 16. SELECT SPECIFIC COLUMNS =====
+    select label, beds, baths, square_feet, cost, price_per_sqft, luxury_score, millions, ppb, root_sqft, rounded, floored, ceiled, abs_val, greeting from renamed as selected
+
+    // ===== 17. CAST ALL TYPES =====
+    cast selected beds as string as c1
+    cast c1 cost as int as c2
+    cast c2 millions as float as c3
+    cast c3 label as string as c4
+
+    // ===== 18. SORT AGAIN =====
+    sort c4 by luxury_score desc as final_sorted
+    sort c4 by price_per_sqft asc as best_value
+    sort c4 by cost desc as most_expensive
+
+    // ===== 19. LIMIT & SAMPLE AGAIN =====
+    limit final_sorted 3 as top3
+    sample most_expensive 100% as all_data
+
+    // ===== 20. DISTINCT AGAIN =====
+    distinct top3 as unique_top3
+
+    // ===== 21. GROUP BY - ALL AGGREGATIONS =====
+    group c4 by beds [
+        count(label) as total_homes,
+        sum(cost) as total_cost,
+        avg(cost) as avg_cost,
+        min(cost) as cheapest,
+        max(cost) as priciest,
+        avg(price_per_sqft) as avg_ppsf
     ] as grouped
 
-    sort grouped by homes desc as final
+    sort grouped by total_homes desc as final_grouped
 
+    // ===== 22. MACHINE LEARNING - ALL MODELS =====
     train raw predict price using linear_regression as lr_model
-    predict raw using lr_model as predicted
+    train raw predict price using random_forest as rf_model
+    train raw predict price using decision_tree as dt_model
 
-    select bedrooms, bathrooms, sqft, price, prediction from predicted as ml_results
+    // ===== 23. PREDICT WITH ALL MODELS =====
+    predict raw using lr_model as lr_pred
+    predict raw using rf_model as rf_pred
+    predict raw using dt_model as dt_pred
 
-    print final
+    // ===== 24. SELECT ML RESULTS =====
+    select bedrooms, bathrooms, sqft, price, prediction from dt_pred as ml_results
+
+    // ===== 25. FOR LOOP =====
+    for row in final_grouped {
+        print final_grouped
+    }
+
+    // ===== 26. IF/ELSE =====
+    let should_export = 1
+    if should_export == 1 {
+        print final_grouped
+    }
+
+    // ===== 27. PRINT EVERYTHING =====
+    print final_grouped
     print ml_results
 
-    write final into "final_output.json"
-    write ml_results into "ml_output.json"
-    excel write final into "final_output.xlsx"
-    chart final homes by bedrooms as bar into "final_chart.html"
+    // ===== 28. WRITE ALL FORMATS =====
+    write final_grouped into "ultimate_report.json"
+    write final_grouped into "ultimate_report.csv"
+    write ml_results into "ultimate_ml.json"
+    write ml_results into "ultimate_ml.csv"
+
+    // ===== 29. EXCEL OUTPUTS =====
+    excel write final_grouped into "ultimate_report.xlsx"
+    excel write ml_results into "ultimate_ml.xlsx"
+
+    // ===== 30. MARKDOWN REPORT =====
+    report final_grouped as "Dapine Ultimate Full Feature Test Report" into "ultimate_report.md"
+
+    // ===== 31. CHARTS - ALL TYPES =====
+    chart final_grouped total_homes by beds as bar into "ultimate_bar.html"
+    chart final_grouped avg_cost by beds as line into "ultimate_line.html"
+    chart final_grouped total_homes by beds as pie into "ultimate_pie.html"
+    chart ml_results price by sqft as scatter into "ultimate_scatter.html"
 
 }

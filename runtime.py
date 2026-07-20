@@ -13,6 +13,7 @@ class DataFrame:
         self.rows = rows
         self.schema = schema
         self.lineage = lineage
+        self.inferred_types = {}
     def __repr__(self):
         return f"DataFrame(rows={len(self.rows)}, schema={self.schema})"
 
@@ -26,6 +27,7 @@ class Runtime:
         self.ml_engine = None
         self.duck = None
         self.use_duckdb = True
+        self._stdlib_loaded = False
 
     def log_lineage(self, target, source, transformation):
         self.lineage_log.append(f"[{target}] <- {transformation} <- [{source}]")
@@ -51,7 +53,6 @@ class Runtime:
             self._get_duck().register_df(name, df.rows, df.schema)
 
     def _resolve_vars(self, expr):
-        """Replace Identifier nodes with literal values from variables."""
         if isinstance(expr, Identifier):
             if expr.name in self.variables:
                 val = self.variables[expr.name]
@@ -70,6 +71,13 @@ class Runtime:
     # ============ STEP EXECUTION ============
 
     def execute_step(self, step):
+        if not self._stdlib_loaded:
+            try:
+                from stdlib import StdLib
+                StdLib(self).register_all()
+            except: pass
+            self._stdlib_loaded = True
+
         if isinstance(step, ReadStep): return self.execute_read(step)
         elif isinstance(step, HttpReadStep): return self.execute_http_read(step)
         elif isinstance(step, FilterStep): return self.execute_filter(step)
@@ -106,6 +114,8 @@ class Runtime:
             rows, schema = duck.load_csv(step.source, t) if step.format_type=="csv" else duck.load_json(step.source, t)
             name = step.alias or f"_df_{len(self.dataframes)}"
             df = DataFrame(rows, schema, f"read {step.format_type}")
+            from dapine_types import TypeSystem
+            df.inferred_types = TypeSystem.infer_schema(rows)
             self.dataframes[name] = df
             self.log_lineage(name, step.source, f"READ {step.format_type.upper()}")
             return df
@@ -116,6 +126,8 @@ class Runtime:
                     rows = [{k: self._infer_type(v) for k,v in row.items()} for row in r]
                     schema = list(rows[0].keys()) if rows else []
                     df = DataFrame(rows, schema, f"read csv")
+                    from dapine_types import TypeSystem
+                    df.inferred_types = TypeSystem.infer_schema(rows)
                     name = step.alias or f"_df_{len(self.dataframes)}"
                     self.dataframes[name] = df
                     self.log_lineage(name, step.source, "READ CSV")
@@ -130,6 +142,8 @@ class Runtime:
                     rows = data if isinstance(data, list) else []
                     schema = list(rows[0].keys()) if rows else []
                     df = DataFrame(rows, schema, "read json")
+                    from dapine_types import TypeSystem
+                    df.inferred_types = TypeSystem.infer_schema(rows)
                     name = step.alias or f"_df_{len(self.dataframes)}"
                     self.dataframes[name] = df
                     self.log_lineage(name, step.source, "READ JSON")
@@ -143,30 +157,22 @@ class Runtime:
             with urllib.request.urlopen(step.url) as resp:
                 data = json.loads(resp.read().decode())
                 rows = data
-                # AUTO-FLATTEN nested APIs
                 if isinstance(rows, dict):
-                    if 'results' in rows and isinstance(rows['results'], list):
-                        rows = rows['results']
-                    elif 'data' in rows and isinstance(rows['data'], list):
-                        rows = rows['data']
-                    elif 'quotes' in rows and isinstance(rows['quotes'], list):
-                        rows = rows['quotes']
-                    elif 'products' in rows and isinstance(rows['products'], list):
-                        rows = rows['products']
-                    elif 'facts' in rows and isinstance(rows['facts'], list):
-                        rows = rows['facts']
-                    elif 'jokes' in rows and isinstance(rows['jokes'], list):
-                        rows = rows['jokes']
-                    elif 'breeds' in rows and isinstance(rows['breeds'], list):
-                        rows = rows['breeds']
-                    else:
-                        rows = [rows]
+                    if 'results' in rows and isinstance(rows['results'], list): rows = rows['results']
+                    elif 'data' in rows and isinstance(rows['data'], list): rows = rows['data']
+                    elif 'quotes' in rows and isinstance(rows['quotes'], list): rows = rows['quotes']
+                    elif 'products' in rows and isinstance(rows['products'], list): rows = rows['products']
+                    elif 'facts' in rows and isinstance(rows['facts'], list): rows = rows['facts']
+                    elif 'jokes' in rows and isinstance(rows['jokes'], list): rows = rows['jokes']
+                    elif 'breeds' in rows and isinstance(rows['breeds'], list): rows = rows['breeds']
+                    else: rows = [rows]
                 if isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict):
                     schema = list(rows[0].keys())
                 else:
-                    schema = ["data"]
-                    rows = [{"data": str(rows)}]
+                    schema = ["data"]; rows = [{"data": str(rows)}]
                 df = DataFrame(rows, schema, f"http read")
+                from dapine_types import TypeSystem
+                df.inferred_types = TypeSystem.infer_schema(rows)
                 name = step.alias or f"_df_{len(self.dataframes)}"
                 self.dataframes[name] = df
                 self.log_lineage(name, step.url, "HTTP READ")
@@ -179,8 +185,9 @@ class Runtime:
         return self.variables[step.var_name]
 
     def execute_filter(self, step):
-        # Resolve variables FIRST
         step.condition = self._resolve_vars(step.condition)
+        df = self.get_df(step.input_ref, step.line)
+        prev_count = len(df.rows)
         
         if self.use_duckdb and step.input_ref in self.dataframes:
             try:
@@ -192,24 +199,37 @@ class Runtime:
                 rows, schema = duck._table_to_rows(alias)
                 name = step.alias or f"_df_{len(self.dataframes)}"
                 df = DataFrame(rows, schema, "filter")
+                if hasattr(self.get_df(step.input_ref), 'inferred_types'):
+                    df.inferred_types = self.get_df(step.input_ref).inferred_types
                 self.dataframes[name] = df
+                new_count = len(rows)
+                if new_count == 0 and prev_count > 0:
+                    print(f"  ⚠️  Filter removed ALL {prev_count} rows! Check your conditions.")
+                elif new_count < prev_count:
+                    print(f"  ℹ️  Filter: {prev_count} → {new_count} rows")
                 self.log_lineage(name, step.input_ref, "FILTER")
                 return df
             except:
                 pass
         
-        df = self.get_df(step.input_ref, step.line)
         filtered = [row for row in df.rows if self.eval_condition(step.condition, row)]
         name = step.alias or f"_df_{len(self.dataframes)}"
-        new_df = DataFrame(filtered, df.schema, "filter")
-        self.dataframes[name] = new_df
+        ndf = DataFrame(filtered, df.schema, "filter")
+        if hasattr(df, 'inferred_types'): ndf.inferred_types = df.inferred_types
+        self.dataframes[name] = ndf
+        
+        new_count = len(filtered)
+        if new_count == 0 and prev_count > 0:
+            print(f"  ⚠️  Filter removed ALL {prev_count} rows! Check your conditions.")
+        elif new_count < prev_count:
+            print(f"  ℹ️  Filter: {prev_count} → {new_count} rows")
+        
         self.log_lineage(name, step.input_ref, "FILTER")
-        return new_df
+        return ndf
 
     def _condition_to_sql(self, expr):
         if isinstance(expr, BinaryOp):
-            l = self._sql_val(expr.left)
-            r = self._sql_val(expr.right)
+            l = self._sql_val(expr.left); r = self._sql_val(expr.right)
             m = {"==":"=", "!=":"<>", "and":"AND", "or":"OR", ">":">", "<":"<", ">=":">=", "<=":"<="}
             return f"({l} {m.get(expr.op, expr.op.upper())} {r})"
         return "1=1"
@@ -229,26 +249,25 @@ class Runtime:
         rows = [{c: row.get(c) for c in step.columns} for row in df.rows]
         name = step.alias or f"_df_{len(self.dataframes)}"
         ndf = DataFrame(rows, step.columns, "select")
+        from dapine_types import TypeSystem
+        ndf.inferred_types = {c: TypeSystem.infer_column(rows, c) for c in step.columns}
         self.dataframes[name] = ndf
-        self.log_lineage(name, step.input_ref, f"SELECT {step.columns}")
+        self.log_lineage(name, step.input_ref, f"SELECT")
         return ndf
 
     def execute_join(self, step):
-        l = self.get_df(step.left_ref, step.line)
-        r = self.get_df(step.right_ref, step.line)
+        l = self.get_df(step.left_ref, step.line); r = self.get_df(step.right_ref, step.line)
         joined = []
         for lr in l.rows:
             m = False
             for rr in r.rows:
-                if lr.get(step.on_column) == rr.get(step.on_column):
-                    joined.append({**lr, **rr}); m = True
-            if step.join_type=="left" and not m:
-                joined.append({**lr, **{k: None for k in r.schema}})
+                if lr.get(step.on_column) == rr.get(step.on_column): joined.append({**lr, **rr}); m = True
+            if step.join_type=="left" and not m: joined.append({**lr, **{k: None for k in r.schema}})
         name = step.alias or f"_df_{len(self.dataframes)}"
         schema = l.schema + [c for c in r.schema if c not in l.schema]
         ndf = DataFrame(joined, schema, "join")
         self.dataframes[name] = ndf
-        self.log_lineage(name, f"{step.left_ref},{step.right_ref}", f"JOIN on {step.on_column}")
+        self.log_lineage(name, f"{step.left_ref},{step.right_ref}", f"JOIN")
         return ndf
 
     def execute_group(self, step):
@@ -262,15 +281,9 @@ class Runtime:
         for k, rows in groups.items():
             out = {step.key_column: k}
             for agg in step.aggregations:
-                if agg.func=="count":
-                    out[agg.output_name] = len(rows)
+                if agg.func=="count": out[agg.output_name] = len(rows)
                 else:
-                    vals = []
-                    for r in rows:
-                        v = r.get(agg.column)
-                        if v is not None:
-                            try: vals.append(float(v))
-                            except: pass
+                    vals = [float(r.get(agg.column)) for r in rows if r.get(agg.column) is not None]
                     if agg.func=="sum": out[agg.output_name] = sum(vals)
                     elif agg.func=="avg": out[agg.output_name] = sum(vals)/len(vals) if vals else 0
                     elif agg.func=="min": out[agg.output_name] = min(vals) if vals else None
@@ -290,7 +303,7 @@ class Runtime:
                 w = csv.DictWriter(f, fieldnames=df.schema); w.writeheader(); w.writerows(df.rows)
         elif step.format_type=="json":
             with open(step.target,"w") as f: json.dump(df.rows, f, indent=2, default=str)
-        self.log_lineage(step.target, step.input_ref, f"WRITE {step.format_type}")
+        self.log_lineage(step.target, step.input_ref, f"WRITE")
         print(f"Written {len(df.rows)} rows to {step.target}")
 
     def execute_sort(self, step):
@@ -299,8 +312,9 @@ class Runtime:
         rows = sorted(df.rows, key=lambda r: (r.get(step.column) is None, r.get(step.column,"")), reverse=rev)
         name = step.alias or f"_df_{len(self.dataframes)}"
         ndf = DataFrame(rows, df.schema, "sort")
+        if hasattr(df, 'inferred_types'): ndf.inferred_types = df.inferred_types
         self.dataframes[name] = ndf
-        self.log_lineage(name, step.input_ref, f"SORT {step.column} {step.direction}")
+        self.log_lineage(name, step.input_ref, f"SORT")
         return ndf
 
     def execute_distinct(self, step):
@@ -320,25 +334,20 @@ class Runtime:
         name = step.alias or f"_df_{len(self.dataframes)}"
         ndf = DataFrame(df.rows[:step.count], df.schema, "limit")
         self.dataframes[name] = ndf
-        self.log_lineage(name, step.input_ref, f"LIMIT {step.count}")
+        self.log_lineage(name, step.input_ref, f"LIMIT")
         return ndf
 
     def execute_mutate(self, step):
         df = self.get_df(step.input_ref, step.line)
-        rows = []
-        for row in df.rows:
-            nr = dict(row)
-            nr[step.new_column] = self.eval_arithmetic(step.expression, row)
-            rows.append(nr)
-        name = step.alias or f"_df_{len(self.dataframes)}"
-        ndf = DataFrame(rows, df.schema + [step.new_column], "mutate")
-        self.dataframes[name] = ndf
-        self.log_lineage(name, step.input_ref, f"MUTATE add {step.new_column}")
-        return ndf
+        if len(df.rows) == 0:
+            name = step.alias or f"_df_{len(self.dataframes)}"
+            ndf = DataFrame([], df.schema + [step.new_column], "mutate")
+            self.dataframes[name] = ndf
+            return ndf
+        # ... rest of existing code
 
     def execute_union(self, step):
-        l = self.get_df(step.left_ref, step.line)
-        r = self.get_df(step.right_ref, step.line)
+        l = self.get_df(step.left_ref, step.line); r = self.get_df(step.right_ref, step.line)
         schema = list(dict.fromkeys(l.schema + r.schema))
         name = step.alias or f"_df_{len(self.dataframes)}"
         ndf = DataFrame(l.rows + r.rows, schema, "union")
@@ -358,11 +367,24 @@ class Runtime:
 
     def execute_print(self, step):
         df = self.get_df(step.input_ref, step.line)
+        if len(df.rows) == 0:
+            print(f"\n  {step.input_ref}: EMPTY (0 rows)")
+            if hasattr(df, 'inferred_types') and df.inferred_types:
+                types_str = ', '.join(f'{k}:{v}' for k,v in df.inferred_types.items())
+                print(f"  Expected types: {types_str}")
+            print(f"  {'-'*50}\n")
+            return df
+        
         print(f"\n  {step.input_ref}: {len(df.rows)} rows x {len(df.schema)} cols")
         print(f"  Columns: {', '.join(df.schema)}")
+        if hasattr(df, 'inferred_types') and df.inferred_types:
+            types_str = ', '.join(f'{k}:{v}' for k,v in df.inferred_types.items())
+            print(f"  Types: {types_str}")
         print(f"  {'-'*50}")
-        for row in df.rows[:20]: print(f"  {row}")
-        if len(df.rows)>20: print(f"  ... and {len(df.rows)-20} more")
+        for row in df.rows[:20]:
+            print(f"  {row}")
+        if len(df.rows) > 20:
+            print(f"  ... and {len(df.rows) - 20} more rows")
         print(f"  {'-'*50}\n")
         return df
 
@@ -388,7 +410,7 @@ class Runtime:
         name = step.alias or f"_df_{len(self.dataframes)}"
         ndf = DataFrame(random.sample(df.rows, min(k, len(df.rows))), df.schema, "sample")
         self.dataframes[name] = ndf
-        self.log_lineage(name, step.input_ref, f"SAMPLE {step.percent}%")
+        self.log_lineage(name, step.input_ref, f"SAMPLE")
         return ndf
 
     def execute_stats(self, step):
@@ -406,9 +428,7 @@ class Runtime:
 
     def execute_for(self, step):
         df = self.get_df(step.input_ref, step.line)
-        for row in df.rows:
-            self.variables[step.row_var] = row
-            for s in step.body: self.execute_step(s)
+        for row in df.rows: self.variables[step.row_var] = row; [self.execute_step(s) for s in step.body]
         return df
 
     def execute_case(self, step):
@@ -417,18 +437,13 @@ class Runtime:
             v = row.get(step.column); matched = False
             for case in step.cases:
                 if v == self._eval_atomic(case.value, row):
-                    matched = True
-                    for s in case.body: self.execute_step(s)
-                    break
-            if not matched and step.default_alias:
-                for s in step.default_alias: self.execute_step(s)
+                    matched = True; [self.execute_step(s) for s in case.body]; break
+            if not matched and step.default_alias: [self.execute_step(s) for s in step.default_alias]
         return df
 
     def execute_if(self, step):
-        if self.eval_condition(step.condition, {}):
-            for s in step.if_body: self.execute_step(s)
-        elif step.else_body:
-            for s in step.else_body: self.execute_step(s)
+        if self.eval_condition(step.condition, {}): [self.execute_step(s) for s in step.if_body]
+        elif step.else_body: [self.execute_step(s) for s in step.else_body]
         return None
 
     def execute_chart(self, step):
@@ -449,8 +464,7 @@ class Runtime:
         if not self.ml_engine: self.ml_engine = MLEngine()
         df = self.get_df(step.input_ref, step.line)
         rows, schema = self.ml_engine.predict(df, step.model_name, step.output_col)
-        if rows is None:
-            print(f"Error: {schema.get('error')}"); return None
+        if rows is None: print(f"Error: {schema.get('error')}"); return None
         name = step.alias or f"_df_{len(self.dataframes)}"
         ndf = DataFrame(rows, schema, "predict")
         self.dataframes[name] = ndf
@@ -492,7 +506,6 @@ class Runtime:
         ReportEngine(self).generate_report(step.input_ref, step.title, step.target)
         return None
 
-    # ============ TYPE INFERENCE ============
     def _infer_type(self, v):
         v = v.strip()
         if v=="" or v.lower() in ("null","none"): return None
@@ -504,7 +517,6 @@ class Runtime:
         except: pass
         return v
 
-    # ============ EXPRESSION EVALUATION ============
     def _eval_atomic(self, expr, row):
         if isinstance(expr, BinaryOp): return self.eval_condition(expr, row)
         if isinstance(expr, ArithOp): return self.eval_arithmetic(expr, row)
@@ -512,6 +524,7 @@ class Runtime:
         if isinstance(expr, ColumnRef): return row.get(expr.column)
         if isinstance(expr, Identifier):
             if expr.name in self.variables: return self.variables[expr.name]
+            if expr.name in self.functions: return self.functions[expr.name]
             return row.get(expr.name)
         if isinstance(expr, StringLiteral): return expr.value
         if isinstance(expr, NumberLiteral): return expr.value
