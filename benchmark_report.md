@@ -1,8 +1,8 @@
-# Dapine Benchmark Report
+# Dapine Ultimate Benchmark
 
-**Generated:** 2026-07-19 18:56:45  
+**Generated:** 2026-07-20 16:14:00  
 **Rows:** 0  
-**Columns:** beds, homes, total_cost, avg_cost, cheapest, priciest, avg_ppsf
+**Columns:** beds, total_homes, avg_cost, cheapest, priciest, avg_ppsf
 
 ---
 
@@ -18,47 +18,40 @@
 ## Data Lineage
 
 - [raw] <- READ CSV <- [houses.csv]
-- [in_budget] <- FILTER <- [raw]
-- [big] <- FILTER <- [in_budget]
-- [nice] <- FILTER <- [big]
-- [clean] <- FILTER <- [nice]
+- [users] <- HTTP READ <- [https://randomuser.me/api/?results=3]
+- [in_range] <- FILTER <- [raw]
+- [good_size] <- FILTER <- [in_range]
+- [nice] <- FILTER <- [good_size]
+- [spacious] <- FILTER <- [nice]
+- [clean] <- FILTER <- [spacious]
 - [m1] <- MUTATE add doubled <- [clean]
 - [m2] <- MUTATE add tripled <- [m1]
 - [m3] <- MUTATE add price_per_sqft <- [m2]
-- [m4] <- MUTATE add score <- [m3]
+- [m4] <- MUTATE add luxury <- [m3]
 - [m5] <- MUTATE add millions <- [m4]
-- [m6] <- MUTATE add bed_sq <- [m5]
-- [m7] <- MUTATE add ppb <- [m6]
-- [m8] <- MUTATE add root_sqft <- [m7]
-- [m9] <- MUTATE add r_ppsf <- [m8]
-- [m10] <- MUTATE add f_ppsf <- [m9]
-- [m11] <- MUTATE add c_ppsf <- [m10]
-- [m12] <- MUTATE add abs_diff <- [m11]
-- [m13] <- MUTATE add label <- [m12]
-- [m14] <- MUTATE add upper_lbl <- [m13]
-- [m15] <- MUTATE add lower_lbl <- [m14]
-- [m16] <- MUTATE add lbl_len <- [m15]
-- [m17] <- MUTATE add trimmed_lbl <- [m16]
-- [renamed] <- RENAME {'bedrooms': 'beds', 'bathrooms': 'baths', 'price': 'cost'} <- [m17]
-- [selected] <- SELECT ['label', 'beds', 'baths', 'sqft', 'cost', 'price_per_sqft', 'score', 'millions', 'ppb', 'root_sqft', 'r_ppsf', 'f_ppsf', 'c_ppsf', 'abs_diff'] <- [renamed]
-- [c1] <- CAST beds → string <- [selected]
-- [c2] <- CAST millions → float <- [c1]
-- [c3] <- CAST label → string <- [c2]
-- [by_luxury] <- SORT BY score desc <- [c3]
-- [by_ppsf] <- SORT BY price_per_sqft asc <- [c3]
-- [by_price] <- SORT BY cost desc <- [c3]
+- [m6] <- MUTATE add root_sqft <- [m5]
+- [m7] <- MUTATE add rounded <- [m6]
+- [m8] <- MUTATE add label <- [m7]
+- [m9] <- MUTATE add upper_lbl <- [m8]
+- [m10] <- MUTATE add len_lbl <- [m9]
+- [renamed] <- RENAME {'bedrooms': 'beds', 'bathrooms': 'baths', 'price': 'cost'} <- [m10]
+- [selected] <- SELECT ['label', 'beds', 'baths', 'sqft', 'cost', 'price_per_sqft', 'luxury', 'millions', 'root_sqft', 'rounded'] <- [renamed]
+- [by_luxury] <- SORT BY luxury desc <- [selected]
+- [best_value] <- SORT BY price_per_sqft asc <- [selected]
+- [by_price] <- SORT BY cost desc <- [selected]
 - [top3] <- LIMIT 3 <- [by_luxury]
 - [sampled] <- SAMPLE 50.0% <- [by_price]
 - [unique_top] <- DISTINCT <- [top3]
-- [grouped] <- GROUP BY beds <- [c3]
-- [final] <- SORT BY homes desc <- [grouped]
+- [grouped] <- GROUP BY beds <- [selected]
+- [final_grouped] <- SORT BY total_homes desc <- [grouped]
 - [lr_pred] <- PREDICT using lr_model <- [raw]
 - [rf_pred] <- PREDICT using rf_model <- [raw]
-- [dt_pred] <- PREDICT using dt_model <- [raw]
-- [ml_results] <- SELECT ['bedrooms', 'bathrooms', 'sqft', 'price', 'prediction'] <- [dt_pred]
-- [benchmark_results.json] <- WRITE json <- [final]
-- [benchmark_results.csv] <- WRITE csv <- [final]
-- [benchmark_results.xlsx] <- EXCEL WRITE <- [final]
+- [ml_results] <- SELECT ['bedrooms', 'bathrooms', 'sqft', 'price', 'prediction'] <- [rf_pred]
+- [benchmark_final.json] <- WRITE json <- [final_grouped]
+- [benchmark_final.csv] <- WRITE csv <- [final_grouped]
+- [ml_predictions.json] <- WRITE json <- [ml_results]
+- [benchmark_final.xlsx] <- EXCEL WRITE <- [final_grouped]
+- [ml_predictions.xlsx] <- EXCEL WRITE <- [ml_results]
 
 ---
 
