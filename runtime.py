@@ -27,7 +27,7 @@ class Runtime:
         self.pipelines = {}
         self.ml_engine = None
         self.duck = None
-        self.use_duckdb = True
+        self.use_duckdb = False
         self._stdlib_loaded = False
         self.slack_webhook = None
 

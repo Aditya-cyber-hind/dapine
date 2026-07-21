@@ -1,17 +1,63 @@
 # Dapine Ultimate Test Report
 
-**Generated:** 2026-07-21 20:10:35  
-**Rows:** 0  
+**Generated:** 2026-07-21 20:12:53  
+**Rows:** 2  
 **Columns:** beds, total_homes, total_cost, avg_cost, cheapest, priciest, avg_ppsf
 
 ---
 
 ## Data Preview
 
+| beds | total_homes | total_cost | avg_cost | cheapest | priciest | avg_ppsf |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4 | 3 | 1350000.0 | 450000.0 | 400000.0 | 500000.0 | 201.5151515151515 |
+| 5 | 2 | 1150000.0 | 575000.0 | 550000.0 | 600000.0 | 198.21428571428572 |
 
 ---
 
 ## Column Statistics
+
+### total_homes
+- **Min:** 2
+- **Max:** 3
+- **Mean:** 2.50
+- **Median:** 2.50
+- **Std Dev:** 0.71
+
+### total_cost
+- **Min:** 1150000.0
+- **Max:** 1350000.0
+- **Mean:** 1250000.00
+- **Median:** 1250000.00
+- **Std Dev:** 141421.36
+
+### avg_cost
+- **Min:** 450000.0
+- **Max:** 575000.0
+- **Mean:** 512500.00
+- **Median:** 512500.00
+- **Std Dev:** 88388.35
+
+### cheapest
+- **Min:** 400000.0
+- **Max:** 550000.0
+- **Mean:** 475000.00
+- **Median:** 475000.00
+- **Std Dev:** 106066.02
+
+### priciest
+- **Min:** 500000.0
+- **Max:** 600000.0
+- **Mean:** 550000.00
+- **Median:** 550000.00
+- **Std Dev:** 70710.68
+
+### avg_ppsf
+- **Min:** 198.21428571428572
+- **Max:** 201.5151515151515
+- **Mean:** 199.86
+- **Median:** 199.86
+- **Std Dev:** 2.33
 
 ---
 
@@ -30,37 +76,46 @@
 - [nice] <- FILTER <- [big_enough]
 - [spacious] <- FILTER <- [nice]
 - [clean] <- FILTER <- [spacious]
+- [by_price_desc] <- SORT <- [clean]
+- [by_sqft_asc] <- SORT <- [clean]
+- [by_beds_desc] <- SORT <- [clean]
 - [top5] <- LIMIT <- [by_price_desc]
 - [random_sample] <- SAMPLE <- [clean]
 - [unique_homes] <- DISTINCT <- [top5]
-- [m1] <- MUTATE add doubled (empty) <- [unique_homes]
-- [m2] <- MUTATE add tripled (empty) <- [m1]
-- [m3] <- MUTATE add price_per_sqft (empty) <- [m2]
-- [m4] <- MUTATE add luxury_score (empty) <- [m3]
-- [m5] <- MUTATE add half_price (empty) <- [m4]
-- [m6] <- MUTATE add with_bonus (empty) <- [m5]
-- [m7] <- MUTATE add complex (empty) <- [m6]
-- [m8] <- MUTATE add millions (empty) <- [m7]
-- [m9] <- MUTATE add bed_squared (empty) <- [m8]
-- [m10] <- MUTATE add ppb (empty) <- [m9]
-- [m11] <- MUTATE add root_sqft (empty) <- [m10]
-- [m12] <- MUTATE add abs_diff (empty) <- [m11]
-- [m13] <- MUTATE add rounded (empty) <- [m12]
-- [m14] <- MUTATE add floored (empty) <- [m13]
-- [m15] <- MUTATE add ceiled (empty) <- [m14]
-- [m16] <- MUTATE add label (empty) <- [m15]
-- [m17] <- MUTATE add upper_label (empty) <- [m16]
-- [m18] <- MUTATE add lower_label (empty) <- [m17]
-- [m19] <- MUTATE add label_len (empty) <- [m18]
-- [m20] <- MUTATE add trimmed (empty) <- [m19]
-- [m21] <- MUTATE add greeting (empty) <- [m20]
+- [m1] <- MUTATE add doubled <- [unique_homes]
+- [m2] <- MUTATE add tripled <- [m1]
+- [m3] <- MUTATE add price_per_sqft <- [m2]
+- [m4] <- MUTATE add luxury_score <- [m3]
+- [m5] <- MUTATE add half_price <- [m4]
+- [m6] <- MUTATE add with_bonus <- [m5]
+- [m7] <- MUTATE add complex <- [m6]
+- [m8] <- MUTATE add millions <- [m7]
+- [m9] <- MUTATE add bed_squared <- [m8]
+- [m10] <- MUTATE add ppb <- [m9]
+- [m11] <- MUTATE add root_sqft <- [m10]
+- [m12] <- MUTATE add abs_diff <- [m11]
+- [m13] <- MUTATE add rounded <- [m12]
+- [m14] <- MUTATE add floored <- [m13]
+- [m15] <- MUTATE add ceiled <- [m14]
+- [m16] <- MUTATE add label <- [m15]
+- [m17] <- MUTATE add upper_label <- [m16]
+- [m18] <- MUTATE add lower_label <- [m17]
+- [m19] <- MUTATE add label_len <- [m18]
+- [m20] <- MUTATE add trimmed <- [m19]
+- [m21] <- MUTATE add greeting <- [m20]
 - [renamed] <- RENAME <- [m21]
+- [selected] <- SELECT <- [renamed]
 - [c1] <- CAST <- [selected]
 - [c2] <- CAST <- [c1]
 - [c3] <- CAST <- [c2]
 - [c4] <- CAST <- [c3]
+- [final_sort] <- SORT <- [c4]
+- [best_value] <- SORT <- [c4]
+- [most_expensive] <- SORT <- [c4]
 - [top3_final] <- LIMIT <- [final_sort]
 - [unique_final] <- DISTINCT <- [top3_final]
+- [grouped] <- GROUP BY beds <- [c4]
+- [grouped_sorted] <- SORT <- [grouped]
 - [lr_pred] <- PREDICT <- [raw]
 - [rf_pred] <- PREDICT <- [raw]
 - [dt_pred] <- PREDICT <- [raw]
