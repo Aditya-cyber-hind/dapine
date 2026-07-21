@@ -86,8 +86,7 @@ class Parser:
             if self.is_type_token(self.peek()):
                 ptype = self.consume().value
             else:
-                raise ParserError(f"Expected type, got {self.peek().type}", self.peek().line, self.peek().column,
-                                hint="Valid types: table, int, string, float, bool, date")
+                raise ParserError(f"Expected type, got {self.peek().type}", self.peek().line, self.peek().column)
             params.append(Param(name, ptype))
             while self.peek().type == "COMMA":
                 self.consume("COMMA")
@@ -122,53 +121,41 @@ class Parser:
             "CAST": self.parse_cast, "SAMPLE": self.parse_sample,
             "STATS": self.parse_stats, "CHART": self.parse_chart,
             "TRAIN": self.parse_train, "PREDICT": self.parse_predict,
-            "DB_READ": self.parse_db_read,
-            "DB_WRITE": self.parse_db_write,
-            "EXCEL": self.parse_excel,
-            "REPORT": self.parse_report,
+            "DB_READ": self.parse_db_read, "DB_WRITE": self.parse_db_write,
+            "EXCEL": self.parse_excel, "REPORT": self.parse_report,
+            "ALERT": self.parse_alert,
         }
         if token.type in type_map:
             return type_map[token.type]()
-        raise ParserError(f"Unknown command: '{token.value}'", token.line, token.column,
-                         hint="Valid commands: read, filter, select, sort, mutate, write, chart, train, predict, etc.")
+        raise ParserError(f"Unknown command: '{token.value}'", token.line, token.column)
 
     def parse_read(self):
         line = self.peek().line
         self.consume("READ")
         source = self.consume("STRING_LIT").value.strip('"')
         options = {}
-        if source.endswith(".json"):
-            format_type = "json"
-        elif source.endswith(".csv"):
-            format_type = "csv"
-        else:
-            format_type = "csv"
+        format_type = "json" if source.endswith(".json") else "csv"
         alias = None
         if self.peek() and self.peek().type == "AS":
             self.consume("AS")
-            next_token = self.peek()
-            if next_token and next_token.value in ("csv", "json", "parquet", "table"):
+            n = self.peek()
+            if n and n.value in ("csv","json","parquet","table"):
                 format_type = self.consume().value
                 if self.peek() and self.peek().type == "AS":
-                    self.consume("AS")
-                    alias = self.consume("IDENTIFIER").value
-            else:
-                alias = self.consume("IDENTIFIER").value
+                    self.consume("AS"); alias = self.consume("IDENTIFIER").value
+            else: alias = self.consume("IDENTIFIER").value
         return ReadStep(source, format_type, options, alias, line)
 
     def parse_http_read(self):
         line = self.peek().line
-        self.consume("HTTP")
-        self.consume("READ")
+        self.consume("HTTP"); self.consume("READ")
         url = self.consume("STRING_LIT").value.strip('"')
         format_type = "json"
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            format_type = self.consume().value
+            self.consume("AS"); format_type = self.consume().value
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return HttpReadStep(url, format_type, alias, line)
 
     def parse_filter(self):
@@ -179,8 +166,7 @@ class Parser:
         condition = self.parse_expression()
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return FilterStep(input_ref, condition, alias, line)
 
     def parse_select(self):
@@ -191,15 +177,13 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return SelectStep(input_ref, columns, alias, line)
 
     def parse_join(self):
         line = self.peek().line
         join_type = "inner"
-        if self.peek().type in ("INNER", "LEFT", "RIGHT"):
-            join_type = self.consume().value
+        if self.peek().type in ("INNER","LEFT","RIGHT"): join_type = self.consume().value
         self.consume("JOIN")
         left_ref = self.consume("IDENTIFIER").value
         self.consume("WITH")
@@ -208,8 +192,7 @@ class Parser:
         on_column = self.consume("IDENTIFIER").value
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return JoinStep(left_ref, right_ref, on_column, join_type, alias, line)
 
     def parse_write(self):
@@ -218,17 +201,11 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         self.consume("INTO")
         target = self.consume("STRING_LIT").value.strip('"')
-        if target.endswith(".json"):
-            format_type = "json"
-        elif target.endswith(".csv"):
-            format_type = "csv"
-        else:
-            format_type = "csv"
+        format_type = "json" if target.endswith(".json") else "csv"
         if self.peek() and self.peek().type == "AS":
             self.consume("AS")
-            next_token = self.peek()
-            if next_token and next_token.value in ("csv", "json", "parquet"):
-                format_type = self.consume().value
+            n = self.peek()
+            if n and n.value in ("csv","json"): format_type = self.consume().value
         return WriteStep(input_ref, target, format_type, None, line)
 
     def parse_group(self):
@@ -237,12 +214,11 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         self.consume("BY")
         key_column = self.consume("IDENTIFIER").value
-        aggregations = self.parse_aggregations()
+        aggs = self.parse_aggregations()
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
-        return GroupStep(input_ref, key_column, aggregations, alias, line)
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
+        return GroupStep(input_ref, key_column, aggs, alias, line)
 
     def parse_aggregations(self):
         aggs = []
@@ -255,8 +231,7 @@ class Parser:
             self.consume("AS")
             output_name = self.consume("IDENTIFIER").value
             aggs.append(Aggregation(func, column, output_name))
-            if self.peek().type == "COMMA":
-                self.consume("COMMA")
+            if self.peek().type == "COMMA": self.consume("COMMA")
         self.consume("RBRACKET")
         return aggs
 
@@ -265,13 +240,11 @@ class Parser:
         if self.is_keyword_or_identifier(self.peek()):
             names.append(self.consume().value)
         else:
-            raise ParserError(f"Expected column name, got {self.peek().type}", self.peek().line, self.peek().column)
+            raise ParserError(f"Expected column name", self.peek().line, self.peek().column)
         while self.peek().type == "COMMA":
             self.consume("COMMA")
             if self.is_keyword_or_identifier(self.peek()):
                 names.append(self.consume().value)
-            else:
-                raise ParserError(f"Expected column name after comma", self.peek().line, self.peek().column)
         return names
 
     def parse_sort(self):
@@ -279,15 +252,12 @@ class Parser:
         self.consume("SORT")
         input_ref = self.consume("IDENTIFIER").value
         self.consume("BY")
-        column = self.peek().value
-        self.consume()
+        column = self.peek().value; self.consume()
         direction = "asc"
-        if self.peek() and self.peek().type in ("ASC", "DESC"):
-            direction = self.consume().value
+        if self.peek() and self.peek().type in ("ASC","DESC"): direction = self.consume().value
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return SortStep(input_ref, column, direction, alias, line)
 
     def parse_distinct(self):
@@ -296,8 +266,7 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return DistinctStep(input_ref, alias, line)
 
     def parse_limit(self):
@@ -307,8 +276,7 @@ class Parser:
         count = int(self.consume("NUMBER_LIT").value)
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return LimitStep(input_ref, count, alias, line)
 
     def parse_mutate(self):
@@ -316,14 +284,12 @@ class Parser:
         self.consume("MUTATE")
         input_ref = self.consume("IDENTIFIER").value
         self.consume("ADD")
-        new_column = self.peek().value
-        self.consume()
+        new_column = self.peek().value; self.consume()
         self.consume("ASSIGN")
         expression = self.parse_arithmetic()
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return MutateStep(input_ref, new_column, expression, alias, line)
 
     def parse_union(self):
@@ -334,8 +300,7 @@ class Parser:
         right_ref = self.consume("IDENTIFIER").value
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return UnionStep(left_ref, right_ref, alias, line)
 
     def parse_rename(self):
@@ -343,24 +308,19 @@ class Parser:
         self.consume("RENAME")
         input_ref = self.consume("IDENTIFIER").value
         renames = {}
-        old_name = self.peek().value
-        self.consume()
+        old = self.peek().value; self.consume()
         self.consume("TO")
-        new_name = self.peek().value
-        self.consume()
-        renames[old_name] = new_name
+        new = self.peek().value; self.consume()
+        renames[old] = new
         while self.peek().type == "COMMA":
             self.consume("COMMA")
-            old_name = self.peek().value
-            self.consume()
+            old = self.peek().value; self.consume()
             self.consume("TO")
-            new_name = self.peek().value
-            self.consume()
-            renames[old_name] = new_name
+            new = self.peek().value; self.consume()
+            renames[old] = new
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return RenameStep(input_ref, renames, alias, line)
 
     def parse_print(self):
@@ -378,25 +338,21 @@ class Parser:
         self.consume("RBRACE")
         else_body = []
         if self.peek() and self.peek().type == "ELSE":
-            self.consume("ELSE")
-            self.consume("LBRACE")
-            else_body = self.parse_steps()
-            self.consume("RBRACE")
+            self.consume("ELSE"); self.consume("LBRACE")
+            else_body = self.parse_steps(); self.consume("RBRACE")
         return IfStep(condition, if_body, else_body, None, line)
 
     def parse_import(self):
         line = self.peek().line
         self.consume("IMPORT")
-        filepath = self.consume("STRING_LIT").value.strip('"')
-        return ImportStep(filepath, line)
+        return ImportStep(self.consume("STRING_LIT").value.strip('"'), line)
 
     def parse_let(self):
         line = self.peek().line
         self.consume("LET")
         var_name = self.consume("IDENTIFIER").value
         self.consume("ASSIGN")
-        value = self.parse_expression()
-        return LetStep(var_name, value, None, line)
+        return LetStep(var_name, self.parse_expression(), None, line)
 
     def parse_for(self):
         line = self.peek().line
@@ -416,28 +372,20 @@ class Parser:
         self.consume("WHEN")
         column = self.consume("IDENTIFIER").value
         self.consume("LBRACE")
-        cases = []
-        default_body = None
+        cases = []; default_body = None
         while self.peek() and self.peek().type != "RBRACE":
             if self.peek().type == "WHEN":
-                self.consume("WHEN")
-                value = self.parse_primary()
-                self.consume("LBRACE")
-                body = self.parse_steps()
-                self.consume("RBRACE")
-                cases.append(CaseClause(value, body))
+                self.consume("WHEN"); v = self.parse_primary()
+                self.consume("LBRACE"); b = self.parse_steps(); self.consume("RBRACE")
+                cases.append(CaseClause(v, b))
             elif self.peek().type == "ELSE":
-                self.consume("ELSE")
-                self.consume("LBRACE")
-                default_body = self.parse_steps()
-                self.consume("RBRACE")
-            else:
-                raise ParserError(f"Expected WHEN or ELSE, got {self.peek().type}", self.peek().line, self.peek().column)
+                self.consume("ELSE"); self.consume("LBRACE")
+                default_body = self.parse_steps(); self.consume("RBRACE")
+            else: break
         self.consume("RBRACE")
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return CaseStep(input_ref, column, cases, default_body, alias, line)
 
     def parse_cast(self):
@@ -446,15 +394,10 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         column = self.consume("IDENTIFIER").value
         self.consume("AS")
-        if self.is_type_token(self.peek()) or self.peek().type == "IDENTIFIER":
-            new_type = self.consume().value
-        else:
-            raise ParserError(f"Expected type, got {self.peek().type}", self.peek().line, self.peek().column,
-                            hint="Valid types: int, string, float, bool, date")
+        new_type = self.peek().value; self.consume()
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return CastStep(input_ref, column, new_type, alias, line)
 
     def parse_sample(self):
@@ -462,12 +405,10 @@ class Parser:
         self.consume("SAMPLE")
         input_ref = self.consume("IDENTIFIER").value
         percent = float(self.consume("NUMBER_LIT").value)
-        if self.peek().type == "PERCENT":
-            self.consume("PERCENT")
+        if self.peek().type == "PERCENT": self.consume("PERCENT")
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return SampleStep(input_ref, percent, alias, line)
 
     def parse_stats(self):
@@ -476,8 +417,7 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return StatsStep(input_ref, alias, line)
 
     def parse_chart(self):
@@ -488,16 +428,10 @@ class Parser:
         self.consume("BY")
         label_col = self.consume("IDENTIFIER").value
         self.consume("AS")
-        chart_type = self.peek().value
-        self.consume()
+        chart_type = self.peek().value; self.consume()
         self.consume("INTO")
         target = self.consume("STRING_LIT").value.strip('"')
-        title = f"{chart_type} chart of {value_col} by {label_col}"
-        alias = None
-        if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
-        return ChartStep(input_ref, chart_type, label_col, value_col, title, target, alias, line)
+        return ChartStep(input_ref, chart_type, label_col, value_col, f"chart", target, None, line)
 
     def parse_train(self):
         line = self.peek().line
@@ -506,8 +440,7 @@ class Parser:
         self.consume("PREDICT")
         target_col = self.consume("IDENTIFIER").value
         self.consume("USING")
-        model_type = self.peek().value
-        self.consume()
+        model_type = self.peek().value; self.consume()
         self.consume("AS")
         model_name = self.consume("IDENTIFIER").value
         return TrainStep(input_ref, target_col, model_type, model_name, None, line)
@@ -518,70 +451,31 @@ class Parser:
         input_ref = self.consume("IDENTIFIER").value
         self.consume("USING")
         model_name = self.consume("IDENTIFIER").value
-        output_col = "prediction"
-        alias = None
+        output_col = "prediction"; alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
         return PredictStep(input_ref, model_name, output_col, alias, line)
 
-    # ============ EXPRESSIONS ============
-
-    def parse_expression(self):
-        if self.peek().type == "IDENTIFIER":
-            left = self.parse_arithmetic()
-            if self.peek() and self.peek().type == "IS":
-                self.consume("IS")
-                if self.peek().type == "NOT":
-                    self.consume("NOT")
-                    self.consume("NULL")
-                    return BinaryOp(left, "is_not", NullLiteral())
-                else:
-                    self.consume("NULL")
-                    return BinaryOp(left, "is", NullLiteral())
-            if self.peek() and self.peek().type in ("EQ", "NEQ", "GT", "LT", "GTE", "LTE", "AND", "OR",
-                "CONTAINS", "MATCHES", "STARTS_WITH", "ENDS_WITH"):
-                op = self.consume().value
-                right = self.parse_expression()
-                return BinaryOp(left, op, right)
-            return left
-
-        left = self.parse_arithmetic()
-        if self.peek() and self.peek().type in ("EQ", "NEQ", "GT", "LT", "GTE", "LTE", "AND", "OR",
-            "CONTAINS", "MATCHES", "STARTS_WITH", "ENDS_WITH"):
-            op = self.consume().value
-            right = self.parse_expression()
-            return BinaryOp(left, op, right)
-        return left
-
-    def parse_arithmetic(self):
-        left = self.parse_primary()
-        while self.peek() and self.peek().type in ("PLUS", "MINUS", "STAR", "SLASH"):
-            op = self.consume().value
-            right = self.parse_primary()
-            left = ArithOp(left, op, right)
-        return left
     def parse_db_read(self):
         line = self.peek().line
         self.consume("DB_READ")
-        conn_str = self.consume("STRING_LIT").value.strip('"')
+        conn = self.consume("STRING_LIT").value.strip('"')
         self.consume("AS")
         query = self.consume("STRING_LIT").value.strip('"')
         alias = None
         if self.peek() and self.peek().type == "AS":
-            self.consume("AS")
-            alias = self.consume("IDENTIFIER").value
-        return DBReadStep(conn_str, query, alias, line)
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
+        return DBReadStep(conn, query, alias, line)
 
     def parse_db_write(self):
         line = self.peek().line
         self.consume("DB_WRITE")
         input_ref = self.consume("IDENTIFIER").value
         self.consume("INTO")
-        conn_str = self.consume("STRING_LIT").value.strip('"')
+        conn = self.consume("STRING_LIT").value.strip('"')
         self.consume("AS")
         table_name = self.consume("IDENTIFIER").value
-        return DBWriteStep(input_ref, conn_str, table_name, None, line)
+        return DBWriteStep(input_ref, conn, table_name, None, line)
 
     def parse_excel(self):
         line = self.peek().line
@@ -589,97 +483,100 @@ class Parser:
         if self.peek().type == "READ":
             self.consume("READ")
             source = self.consume("STRING_LIT").value.strip('"')
-            sheet_name = None
-            if self.peek() and self.peek().type == "SHEET":
-                self.consume("SHEET")
-                sheet_name = self.consume("STRING_LIT").value.strip('"')
             alias = None
             if self.peek() and self.peek().type == "AS":
-                self.consume("AS")
-                alias = self.consume("IDENTIFIER").value
-            return ExcelReadStep(source, sheet_name, alias, line)
-        elif self.peek().type == "WRITE":
+                self.consume("AS"); alias = self.consume("IDENTIFIER").value
+            return ExcelReadStep(source, None, alias, line)
+        else:
             self.consume("WRITE")
             input_ref = self.consume("IDENTIFIER").value
             self.consume("INTO")
             target = self.consume("STRING_LIT").value.strip('"')
-            sheet_name = "Sheet1"
-            return ExcelWriteStep(input_ref, target, sheet_name, None, line)
-        else:
-            raise ParserError(f"Expected READ or WRITE after EXCEL", line)
+            return ExcelWriteStep(input_ref, target, "Sheet1", None, line)
 
     def parse_report(self):
         line = self.peek().line
         self.consume("REPORT")
-        input_ref = self.consume("IDENTIFIER").value
+        input_ref = self.peek().value
+        self.consume()
         self.consume("AS")
         title = self.consume("STRING_LIT").value.strip('"')
         self.consume("INTO")
         target = self.consume("STRING_LIT").value.strip('"')
         return ReportStep(input_ref, title, target, None, line)
+
+    def parse_alert(self):
+        line = self.peek().line
+        self.consume("ALERT")
+        message = self.consume("STRING_LIT").value.strip('"')
+        title = "Dapine Alert"
+        if self.peek() and self.peek().type == "AS":
+            self.consume("AS")
+            title = self.consume("STRING_LIT").value.strip('"')
+        return AlertStep(message, title, line)
+
+    def parse_expression(self):
+        if self.peek().type == "IDENTIFIER":
+            left = self.parse_arithmetic()
+            if self.peek() and self.peek().type == "IS":
+                self.consume("IS")
+                if self.peek().type == "NOT":
+                    self.consume("NOT"); self.consume("NULL")
+                    return BinaryOp(left, "is_not", NullLiteral())
+                self.consume("NULL")
+                return BinaryOp(left, "is", NullLiteral())
+            if self.peek() and self.peek().type in ("EQ","NEQ","GT","LT","GTE","LTE","AND","OR","CONTAINS","MATCHES","STARTS_WITH","ENDS_WITH"):
+                op = self.consume().value
+                return BinaryOp(left, op, self.parse_expression())
+            return left
+        left = self.parse_arithmetic()
+        if self.peek() and self.peek().type in ("EQ","NEQ","GT","LT","GTE","LTE","AND","OR","CONTAINS","MATCHES","STARTS_WITH","ENDS_WITH"):
+            op = self.consume().value
+            return BinaryOp(left, op, self.parse_expression())
+        return left
+
+    def parse_arithmetic(self):
+        left = self.parse_primary()
+        while self.peek() and self.peek().type in ("PLUS","MINUS","STAR","SLASH"):
+            op = self.consume().value
+            left = ArithOp(left, op, self.parse_primary())
+        return left
+
     def parse_primary(self):
         token = self.peek()
         if token.type == "STRING_LIT":
-            self.consume()
-            return StringLiteral(token.value.strip('"'))
+            self.consume(); return StringLiteral(token.value.strip('"'))
         elif token.type == "NUMBER_LIT":
-            self.consume()
-            return NumberLiteral(float(token.value) if "." in token.value else int(token.value))
+            self.consume(); return NumberLiteral(float(token.value) if "." in token.value else int(token.value))
         elif token.type == "DATE_LIT":
             self.consume()
-            d_str = token.value.strip('#')
-            try:
-                d = date.fromisoformat(d_str)
-                return DateLiteral(d)
-            except ValueError:
-                raise ParserError(f"Invalid date: '{d_str}'", token.line, token.column,
-                                hint="Use format: #YYYY-MM-DD#")
-        elif token.type == "TRUE":
-            self.consume()
-            return BooleanLiteral(True)
-        elif token.type == "FALSE":
-            self.consume()
-            return BooleanLiteral(False)
-        elif token.type == "NULL":
-            self.consume()
-            return NullLiteral()
-        elif token.type in ("CONCAT", "UPPER", "LOWER", "LENGTH", "TRIM",
-                           "ABS", "ROUND", "CEIL", "FLOOR", "SQRT",
-                           "YEAR", "MONTH", "DAY", "NOW", "TODAY", "POW",
-                           "DATE_ADD", "DATE_DIFF", "DATE_FORMAT", "DAY_NAME", "MONTH_NAME"):
+            try: return DateLiteral(date.fromisoformat(token.value.strip('#')))
+            except: raise ParserError(f"Invalid date", token.line, token.column)
+        elif token.type == "TRUE": self.consume(); return BooleanLiteral(True)
+        elif token.type == "FALSE": self.consume(); return BooleanLiteral(False)
+        elif token.type == "NULL": self.consume(); return NullLiteral()
+        elif token.type in ("UPPER","LOWER","LENGTH","TRIM","ABS","ROUND","CEIL","FLOOR","SQRT","TODAY","NOW","YEAR","MONTH","DAY","POW","CONCAT"):
             func = self.consume().value
-            self.consume("LPAREN")
-            args = []
+            self.consume("LPAREN"); args = []
             if self.peek().type != "RPAREN":
                 args.append(self.parse_expression())
-                while self.peek().type == "COMMA":
-                    self.consume("COMMA")
-                    args.append(self.parse_expression())
+                while self.peek().type == "COMMA": self.consume("COMMA"); args.append(self.parse_expression())
             self.consume("RPAREN")
             return FuncCall(func, args, token.line)
         elif token.type == "IDENTIFIER":
             self.consume()
             if self.peek() and self.peek().type == "DOT":
-                self.consume("DOT")
-                col = self.consume("IDENTIFIER").value
+                self.consume("DOT"); col = self.consume("IDENTIFIER").value
                 return ColumnRef(token.value, col)
             if self.peek() and self.peek().type == "LPAREN":
-                self.consume("LPAREN")
-                args = []
+                self.consume("LPAREN"); args = []
                 if self.peek().type != "RPAREN":
                     args.append(self.parse_expression())
-                    while self.peek().type == "COMMA":
-                        self.consume("COMMA")
-                        args.append(self.parse_expression())
+                    while self.peek().type == "COMMA": self.consume("COMMA"); args.append(self.parse_expression())
                 self.consume("RPAREN")
                 return FuncCall(token.value, args, token.line)
             return Identifier(token.value)
         elif token.type == "LPAREN":
-            self.consume("LPAREN")
-            expr = self.parse_expression()
-            self.consume("RPAREN")
+            self.consume("LPAREN"); expr = self.parse_expression(); self.consume("RPAREN")
             return expr
-        else:
-            raise ParserError(f"Unexpected token: {token.type} ('{token.value}')",
-                            token.line, token.column,
-                            hint="Expected a value, column name, or expression")
+        raise ParserError(f"Unexpected token: {token.type}", token.line, token.column)

@@ -120,6 +120,8 @@ class Interpreter:
             self.runtime.execute_db_write(step)
         elif isinstance(step, ReportStep):
             return self.runtime.execute_report(step)
+        elif isinstance(step, AlertStep):
+            self.runtime.execute_alert(step)
         else:
             raise RuntimeError(f"Unknown step: {step.operation}", step.line)
         return None

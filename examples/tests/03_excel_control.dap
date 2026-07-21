@@ -1,0 +1,20 @@
+pipeline excel_control_test() {
+    read "houses.csv" as raw
+
+    excel write raw into "houses_export.xlsx"
+    excel read "houses_export.xlsx" as reloaded
+    print reloaded
+
+    let min_price = 300000
+    filter reloaded where price >= min_price as expensive
+
+    group expensive by bedrooms [
+        count(price) as total,
+        avg(price) as avg_price
+    ] as summary
+
+    print summary
+    write summary into "excel_output.json"
+    excel write summary into "excel_output.xlsx"
+    chart summary total by bedrooms as pie into "excel_chart.html"
+}

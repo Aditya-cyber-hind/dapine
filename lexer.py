@@ -49,6 +49,7 @@ KEYWORDS = {
     "db_read": "DB_READ", "db_write": "DB_WRITE",
     "excel": "EXCEL", "xlsx": "XLSX", "sheet": "SHEET",
     "report": "REPORT",
+    "alert": "ALERT",
 }
 
 class Token:

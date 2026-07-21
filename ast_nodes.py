@@ -299,3 +299,8 @@ class ReportStep(Step):
         self.input_ref = input_ref
         self.title = title
         self.target = target
+class AlertStep(Step):
+    def __init__(self, message, title, line):
+        super().__init__("alert", [message, title], None, line)
+        self.message = message
+        self.title = title

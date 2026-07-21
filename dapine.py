@@ -92,6 +92,18 @@ def main():
     elif command == "pkg-list":
         from dap_pm import PackageManager
         PackageManager().list_installed()
+    elif command == "serve":
+        from api_server import DapineAPI
+        from interpreter import Interpreter
+        interp = Interpreter()
+        api = DapineAPI(interp.runtime, port=int(sys.argv[2]) if len(sys.argv) > 2 else 8080)
+        api.start()
+        print("Press Ctrl+C to stop")
+        import time
+        try:
+            while True: time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nServer stopped.")
     else:
         run_file(sys.argv[1])
 

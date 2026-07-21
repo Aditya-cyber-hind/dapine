@@ -1,5 +1,0 @@
-pipeline chart_demo() {
-    read "data.csv" as raw
-    print raw
-    chart raw age by name as bar into "chart.html"
-}

@@ -1,0 +1,21 @@
+pipeline ml_api_test() {
+    read "houses.csv" as raw
+
+    http read "https://randomuser.me/api/?results=2" as json as users
+    print users
+
+    train raw predict price using linear_regression as lr
+    train raw predict price using random_forest as rf
+    train raw predict price using decision_tree as dt
+
+    predict raw using lr as lr_pred
+    predict raw using rf as rf_pred
+    predict raw using dt as dt_pred
+
+    select bedrooms, bathrooms, sqft, price, prediction from dt_pred as ml_results
+    print ml_results
+
+    write ml_results into "ml_output.json"
+    excel write ml_results into "ml_output.xlsx"
+    chart ml_results price by sqft as scatter into "ml_scatter.html"
+}

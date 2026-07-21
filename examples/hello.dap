@@ -1,7 +1,0 @@
-pipeline my_first_pipeline(source_path: string) {
-    read "data.csv" as csv as raw_data
-    filter raw_data where age > 18 as adults
-    select name, age, city from adults as selected
-    group selected by city [count(name) as total_people, avg(age) as avg_age] as grouped
-    write grouped into "output.json" as json
-}

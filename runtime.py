@@ -28,6 +28,7 @@ class Runtime:
         self.duck = None
         self.use_duckdb = True
         self._stdlib_loaded = False
+        self.slack_webhook = None
 
     def log_lineage(self, target, source, transformation):
         self.lineage_log.append(f"[{target}] <- {transformation} <- [{source}]")
@@ -105,6 +106,7 @@ class Runtime:
         elif isinstance(step, ExcelReadStep): return self.execute_excel_read(step)
         elif isinstance(step, ExcelWriteStep): self.execute_excel_write(step)
         elif isinstance(step, ReportStep): return self.execute_report(step)
+        elif isinstance(step, AlertStep): return self.execute_alert(step)
         return None
 
     def execute_read(self, step):
@@ -209,8 +211,7 @@ class Runtime:
                     print(f"  ℹ️  Filter: {prev_count} → {new_count} rows")
                 self.log_lineage(name, step.input_ref, "FILTER")
                 return df
-            except:
-                pass
+            except: pass
         
         filtered = [row for row in df.rows if self.eval_condition(step.condition, row)]
         name = step.alias or f"_df_{len(self.dataframes)}"
@@ -245,6 +246,11 @@ class Runtime:
 
     def execute_select(self, step):
         df = self.get_df(step.input_ref, step.line)
+        if len(df.rows) == 0:
+            name = step.alias or f"_df_{len(self.dataframes)}"
+            empty_df = DataFrame([], step.columns, "select")
+            self.dataframes[name] = empty_df
+            return empty_df
         for c in step.columns: self.check_column(df, c, step.line)
         rows = [{c: row.get(c) for c in step.columns} for row in df.rows]
         name = step.alias or f"_df_{len(self.dataframes)}"
@@ -272,6 +278,13 @@ class Runtime:
 
     def execute_group(self, step):
         df = self.get_df(step.input_ref, step.line)
+        if len(df.rows) == 0:
+            name = step.alias or f"_df_{len(self.dataframes)}"
+            schema = [step.key_column] + [a.output_name for a in step.aggregations]
+            empty_df = DataFrame([], schema, "group")
+            self.dataframes[name] = empty_df
+            return empty_df
+        self.check_column(df, step.key_column, step.line)
         groups = {}
         for row in df.rows:
             k = row.get(step.key_column)
@@ -308,6 +321,12 @@ class Runtime:
 
     def execute_sort(self, step):
         df = self.get_df(step.input_ref, step.line)
+        if len(df.rows) == 0:
+            name = step.alias or f"_df_{len(self.dataframes)}"
+            empty_df = DataFrame([], df.schema, "sort")
+            self.dataframes[name] = empty_df
+            return empty_df
+        self.check_column(df, step.column, step.line)
         rev = step.direction=="desc"
         rows = sorted(df.rows, key=lambda r: (r.get(step.column) is None, r.get(step.column,"")), reverse=rev)
         name = step.alias or f"_df_{len(self.dataframes)}"
@@ -341,10 +360,25 @@ class Runtime:
         df = self.get_df(step.input_ref, step.line)
         if len(df.rows) == 0:
             name = step.alias or f"_df_{len(self.dataframes)}"
-            ndf = DataFrame([], df.schema + [step.new_column], "mutate")
-            self.dataframes[name] = ndf
-            return ndf
-        # ... rest of existing code
+            empty_df = DataFrame([], df.schema + [step.new_column], "mutate")
+            self.dataframes[name] = empty_df
+            self.log_lineage(name, step.input_ref, f"MUTATE add {step.new_column} (empty)")
+            return empty_df
+        mutated = []
+        for row in df.rows:
+            new_row = dict(row)
+            try: new_row[step.new_column] = self.eval_arithmetic(step.expression, row)
+            except: new_row[step.new_column] = None
+            mutated.append(new_row)
+        name = step.alias or f"_df_{len(self.dataframes)}"
+        schema = df.schema + [step.new_column]
+        ndf = DataFrame(mutated, schema, f"mutate add {step.new_column}")
+        if hasattr(df, 'inferred_types'):
+            ndf.inferred_types = dict(df.inferred_types)
+            ndf.inferred_types[step.new_column] = 'float'
+        self.dataframes[name] = ndf
+        self.log_lineage(name, step.input_ref, f"MUTATE add {step.new_column}")
+        return ndf
 
     def execute_union(self, step):
         l = self.get_df(step.left_ref, step.line); r = self.get_df(step.right_ref, step.line)
@@ -370,21 +404,16 @@ class Runtime:
         if len(df.rows) == 0:
             print(f"\n  {step.input_ref}: EMPTY (0 rows)")
             if hasattr(df, 'inferred_types') and df.inferred_types:
-                types_str = ', '.join(f'{k}:{v}' for k,v in df.inferred_types.items())
-                print(f"  Expected types: {types_str}")
+                print(f"  Expected types: {', '.join(f'{k}:{v}' for k,v in df.inferred_types.items())}")
             print(f"  {'-'*50}\n")
             return df
-        
         print(f"\n  {step.input_ref}: {len(df.rows)} rows x {len(df.schema)} cols")
         print(f"  Columns: {', '.join(df.schema)}")
         if hasattr(df, 'inferred_types') and df.inferred_types:
-            types_str = ', '.join(f'{k}:{v}' for k,v in df.inferred_types.items())
-            print(f"  Types: {types_str}")
+            print(f"  Types: {', '.join(f'{k}:{v}' for k,v in df.inferred_types.items())}")
         print(f"  {'-'*50}")
-        for row in df.rows[:20]:
-            print(f"  {row}")
-        if len(df.rows) > 20:
-            print(f"  ... and {len(df.rows) - 20} more rows")
+        for row in df.rows[:20]: print(f"  {row}")
+        if len(df.rows)>20: print(f"  ... and {len(df.rows)-20} more")
         print(f"  {'-'*50}\n")
         return df
 
@@ -504,6 +533,11 @@ class Runtime:
     def execute_report(self, step):
         from reports import ReportEngine
         ReportEngine(self).generate_report(step.input_ref, step.title, step.target)
+        return None
+
+    def execute_alert(self, step):
+        from alerts import AlertEngine
+        AlertEngine(self.slack_webhook).slack(step.message, step.title)
         return None
 
     def _infer_type(self, v):

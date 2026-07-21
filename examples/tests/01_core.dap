@@ -1,0 +1,37 @@
+func double(x) = x * 2
+
+pipeline core_features_test() {
+    read "houses.csv" as raw
+    print raw
+    stats raw
+
+    filter raw where price > 300000 as expensive
+    filter expensive where bedrooms >= 3 as big
+    filter big where bathrooms >= 2 as luxury
+
+    sort luxury by price desc as by_price
+    limit by_price 3 as top3
+
+    mutate top3 add doubled = double(price) as m1
+    mutate m1 add ppsf = price / sqft as m2
+    mutate m2 add rounded = round(ppsf) as m3
+    mutate m3 add label = concat("Home ", bedrooms, "BR") as m4
+
+    rename m4 bedrooms to beds, price to cost as renamed
+    select label, beds, sqft, cost, ppsf, rounded from renamed as selected
+
+    group selected by beds [
+        count(label) as homes,
+        avg(cost) as avg_cost,
+        min(cost) as cheapest
+    ] as grouped
+
+    sort grouped by homes desc as final
+    print final
+
+    write final into "core_output.json"
+    write final into "core_output.csv"
+    excel write final into "core_output.xlsx"
+    report final as "Core Features Test" into "core_report.md"
+    chart final homes by beds as bar into "core_chart.html"
+}
