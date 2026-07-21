@@ -2,6 +2,7 @@ from ast_nodes import *
 from runtime import Runtime, DataFrame
 from errors import RuntimeError, DapineError
 import os
+import time
 
 class Interpreter:
     def __init__(self):
@@ -39,25 +40,41 @@ class Interpreter:
         print(f"\n{'='*60}")
         print(f"  🚀 Running pipeline: {pipeline.name}")
         print(f"{'='*60}")
+        
         result = None
         step_count = 0
+        total_steps = len(pipeline.steps)
+        total_time = 0
+        
         for step in pipeline.steps:
             step_count += 1
+            start_time = time.time()
+            
             try:
                 result = self.execute_step(step)
+                elapsed = time.time() - start_time
+                total_time += elapsed
+                
+                progress = int((step_count / total_steps) * 20)
+                bar = '█' * progress + '░' * (20 - progress)
+                pct = int((step_count / total_steps) * 100)
+                
                 if result is not None:
                     if hasattr(result, 'rows'):
-                        print(f"  ✅ Step {step_count}: {step.operation} → {len(result.rows)} rows")
+                        print(f"  [{bar}] {pct}% | Step {step_count}: {step.operation} → {len(result.rows)} rows ({elapsed:.3f}s)")
                     else:
-                        print(f"  ✅ Step {step_count}: {step.operation} = {result}")
+                        print(f"  [{bar}] {pct}% | Step {step_count}: {step.operation} ({elapsed:.3f}s)")
                 else:
-                    print(f"  ✅ Step {step_count}: {step.operation}")
+                    print(f"  [{bar}] {pct}% | Step {step_count}: {step.operation} ({elapsed:.3f}s)")
+                    
             except DapineError as e:
                 print(f"  ❌ Step {step_count} failed: {step.operation}")
                 raise
+        
         print(f"\n{'='*60}")
-        print(f"  ✅ Pipeline '{pipeline.name}' completed: {step_count} steps")
+        print(f"  ✅ Pipeline '{pipeline.name}' completed: {step_count} steps in {total_time:.2f}s")
         print(f"  📋 Lineage: {len(self.runtime.lineage_log)} transformations tracked")
+        print(f"  ⚡ Avg: {total_time/step_count*1000:.1f}ms per step")
         print(f"{'='*60}")
         return result
 
@@ -110,18 +127,18 @@ class Interpreter:
             return self.runtime.execute_train(step)
         elif isinstance(step, PredictStep):
             return self.runtime.execute_predict(step)
-        elif isinstance(step, ExcelWriteStep):
-            self.runtime.execute_excel_write(step)
-        elif isinstance(step, ExcelReadStep):
-            return self.runtime.execute_excel_read(step)
         elif isinstance(step, DBReadStep):
             return self.runtime.execute_db_read(step)
         elif isinstance(step, DBWriteStep):
             self.runtime.execute_db_write(step)
+        elif isinstance(step, ExcelReadStep):
+            return self.runtime.execute_excel_read(step)
+        elif isinstance(step, ExcelWriteStep):
+            self.runtime.execute_excel_write(step)
         elif isinstance(step, ReportStep):
             return self.runtime.execute_report(step)
         elif isinstance(step, AlertStep):
-            self.runtime.execute_alert(step)
+            return self.runtime.execute_alert(step)
         else:
             raise RuntimeError(f"Unknown step: {step.operation}", step.line)
         return None

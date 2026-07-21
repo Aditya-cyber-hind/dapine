@@ -4,6 +4,7 @@ import urllib.request
 import random
 import statistics
 import math
+import glob
 from datetime import date, datetime, timedelta
 from errors import RuntimeError, ColumnNotFoundError, DataFrameNotFoundError
 from ast_nodes import *
@@ -110,6 +111,29 @@ class Runtime:
         return None
 
     def execute_read(self, step):
+        # Multi-file wildcard support
+        if '*' in step.source or '?' in step.source:
+            files = glob.glob(step.source)
+            if not files:
+                raise RuntimeError(f"No files match: '{step.source}'", step.line)
+            all_rows = []
+            schema = None
+            for f in sorted(files):
+                with open(f, 'r', encoding='utf-8') as fh:
+                    reader = csv.DictReader(fh)
+                    for row in reader:
+                        all_rows.append({k: self._infer_type(v) for k,v in row.items()})
+                    if schema is None:
+                        schema = reader.fieldnames
+            name = step.alias or f"_df_{len(self.dataframes)}"
+            df = DataFrame(all_rows, schema or [], f"read {len(files)} files")
+            from dapine_types import TypeSystem
+            df.inferred_types = TypeSystem.infer_schema(all_rows)
+            self.dataframes[name] = df
+            self.log_lineage(name, step.source, f"READ {len(files)} FILES")
+            print(f"  📂 Read {len(files)} files → {len(all_rows)} rows")
+            return df
+
         if self.use_duckdb and step.format_type in ("csv","json"):
             duck = self._get_duck()
             t = step.alias or f"_t_{len(self.dataframes)}"
@@ -123,7 +147,7 @@ class Runtime:
             return df
         if step.format_type=="csv":
             try:
-                with open(step.source,"r") as f:
+                with open(step.source,"r", encoding='utf-8') as f:
                     r = csv.DictReader(f)
                     rows = [{k: self._infer_type(v) for k,v in row.items()} for row in r]
                     schema = list(rows[0].keys()) if rows else []
@@ -138,7 +162,7 @@ class Runtime:
                 raise RuntimeError(f"File not found: '{step.source}'", step.line)
         elif step.format_type=="json":
             try:
-                with open(step.source,"r") as f:
+                with open(step.source,"r", encoding='utf-8') as f:
                     data = json.load(f)
                     if isinstance(data, dict): data = [data]
                     rows = data if isinstance(data, list) else []
@@ -152,6 +176,16 @@ class Runtime:
                     return df
             except FileNotFoundError:
                 raise RuntimeError(f"File not found: '{step.source}'", step.line)
+        elif step.format_type=="parquet":
+            from connectors import Connectors
+            rows, schema = Connectors().read_parquet(step.source)
+            name = step.alias or f"_df_{len(self.dataframes)}"
+            df = DataFrame(rows, schema, "read parquet")
+            from dapine_types import TypeSystem
+            df.inferred_types = TypeSystem.infer_schema(rows)
+            self.dataframes[name] = df
+            self.log_lineage(name, step.source, "READ PARQUET")
+            return df
         raise RuntimeError(f"Unsupported: {step.format_type}", step.line)
 
     def execute_http_read(self, step):
@@ -207,8 +241,6 @@ class Runtime:
                 new_count = len(rows)
                 if new_count == 0 and prev_count > 0:
                     print(f"  ⚠️  Filter removed ALL {prev_count} rows! Check your conditions.")
-                elif new_count < prev_count:
-                    print(f"  ℹ️  Filter: {prev_count} → {new_count} rows")
                 self.log_lineage(name, step.input_ref, "FILTER")
                 return df
             except: pass
@@ -222,8 +254,6 @@ class Runtime:
         new_count = len(filtered)
         if new_count == 0 and prev_count > 0:
             print(f"  ⚠️  Filter removed ALL {prev_count} rows! Check your conditions.")
-        elif new_count < prev_count:
-            print(f"  ℹ️  Filter: {prev_count} → {new_count} rows")
         
         self.log_lineage(name, step.input_ref, "FILTER")
         return ndf
@@ -312,10 +342,13 @@ class Runtime:
     def execute_write(self, step):
         df = self.get_df(step.input_ref, step.line)
         if step.format_type=="csv":
-            with open(step.target,"w",newline="") as f:
+            with open(step.target,"w",newline="", encoding='utf-8') as f:
                 w = csv.DictWriter(f, fieldnames=df.schema); w.writeheader(); w.writerows(df.rows)
         elif step.format_type=="json":
-            with open(step.target,"w") as f: json.dump(df.rows, f, indent=2, default=str)
+            with open(step.target,"w", encoding='utf-8') as f: json.dump(df.rows, f, indent=2, default=str)
+        elif step.format_type=="parquet":
+            from connectors import Connectors
+            Connectors().write_parquet(df.rows, df.schema, step.target)
         self.log_lineage(step.target, step.input_ref, f"WRITE")
         print(f"Written {len(df.rows)} rows to {step.target}")
 
@@ -485,7 +518,7 @@ class Runtime:
         if not self.ml_engine: self.ml_engine = MLEngine()
         df = self.get_df(step.input_ref, step.line)
         r = self.ml_engine.train(df, step.target_col, step.model_type, step.model_name)
-        print(f"\n  Model: {step.model_name} | Type: {r.get('model_type')} | R2: {r.get('metrics',{}).get('r2','N/A')}")
+        print(f"\n  Model: {step.model_name} | R2: {r.get('metrics',{}).get('r2','N/A')}")
         return None
 
     def execute_predict(self, step):
