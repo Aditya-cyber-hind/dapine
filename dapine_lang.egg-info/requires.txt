@@ -1,6 +1,0 @@
-duckdb
-scikit-learn
-openpyxl
-pandas
-pyarrow
-groq

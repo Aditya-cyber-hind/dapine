@@ -3,3 +3,12 @@ __pycache__/
 *.csv
 *.json
 !examples/*.dap
+build/
+dist/
+*.spec
+*.egg-info/
+__pycache__/
+*.pyc
+dapine.exe
+*.pkg
+*.pyz
