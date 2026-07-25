@@ -12,3 +12,6 @@ __pycache__/
 dapine.exe
 *.pkg
 *.pyz
+*.xlsx
+!examples/*.xlsx
+8 A - PEN NO.*
