@@ -1,0 +1,3 @@
+read "data.csv" as raw
+print raw
+stats raw

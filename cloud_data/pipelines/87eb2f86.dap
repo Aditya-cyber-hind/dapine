@@ -1,0 +1,2 @@
+read 'houses.csv' as raw
+print raw

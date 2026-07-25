@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>☁️ Dapine Cloud</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+        .header{background:#161b22;padding:15px 30px;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:20px}
+        .header h1{color:#e94560;font-size:24px}
+        .header span{color:#8b949e;font-size:14px}
+        .container{max-width:1400px;margin:0 auto;padding:30px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+        .panel{background:#161b22;border:1px solid #30363d;border-radius:12px;overflow:hidden}
+        .panel-header{background:#1c2333;padding:12px 20px;font-weight:bold;font-size:14px;color:#58a6ff;border-bottom:1px solid #30363d}
+        .panel-body{padding:20px}
+        
+        .upload-zone{border:2px dashed #30363d;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:all 0.3s}
+        .upload-zone:hover{border-color:#58a6ff;background:#1a2332}
+        .upload-zone.dragover{border-color:#238636;background:#1a2a1a}
+        
+        textarea{width:100%;min-height:200px;background:#0d1117;color:#7ee787;border:1px solid #30363d;border-radius:8px;padding:15px;font-family:'Cascadia Code',monospace;font-size:13px;resize:vertical}
+        textarea:focus{outline:none;border-color:#58a6ff}
+        
+        .btn{padding:10px 25px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;font-size:14px;transition:all 0.2s}
+        .btn:hover{transform:translateY(-2px);opacity:0.9}
+        .btn-primary{background:#238636;color:white}
+        .btn-secondary{background:#1f6feb;color:white}
+        .btn-danger{background:#da3633;color:white}
+        
+        .output-area{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:15px;min-height:150px;max-height:400px;overflow-y:auto;font-family:monospace;font-size:12px;white-space:pre-wrap}
+        .output-area .success{color:#7ee787}
+        .output-area .error{color:#f85149}
+        .output-area .info{color:#58a6ff}
+        
+        .file-list{display:flex;flex-wrap:wrap;gap:10px}
+        .file-chip{background:#1f6feb22;border:1px solid #1f6feb44;padding:8px 15px;border-radius:20px;font-size:13px;color:#58a6ff}
+        
+        .status{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px}
+        .status.online{background:#23863622;color:#7ee787;border:1px solid #23863644}
+        .status.offline{background:#da363322;color:#f85149;border:1px solid #da363344}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>☁️ Dapine Cloud</h1>
+        <span>Data Pipeline Platform</span>
+        <span class="status online" id="serverStatus">● Online</span>
+    </div>
+    
+    <div class="container">
+        <div class="panel" style="grid-row:span 2">
+            <div class="panel-header">📂 Upload Data</div>
+            <div class="panel-body">
+                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                    <p style="font-size:40px;margin-bottom:10px">📁</p>
+                    <p>Drop CSV or Excel file here</p>
+                    <p style="color:#8b949e;font-size:12px">or click to browse</p>
+                </div>
+                <input type="file" id="fileInput" accept=".csv,.xlsx" style="display:none" onchange="handleUpload(this.files[0])">
+                <div class="file-list" id="fileList"></div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">📝 Dapine Pipeline</div>
+            <div class="panel-body">
+                <textarea id="codeInput" placeholder="read &quot;data.csv&quot; as raw&#10;print raw&#10;filter raw where price > 300000 as expensive&#10;print expensive">read "data.csv" as raw
+print raw
+stats raw</textarea>
+                <div style="display:flex;gap:10px;margin-top:15px">
+                    <button class="btn btn-primary" onclick="runPipeline()">▶ Run Pipeline</button>
+                    <button class="btn btn-secondary" onclick="savePipeline()">💾 Save</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">📤 Output</div>
+            <div class="panel-body">
+                <div class="output-area" id="output">Ready. Upload data and click ▶ Run.</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API = 'http://localhost:5000/api';
+        let currentFile = null;
+        
+        // Upload drag & drop
+        const zone = document.getElementById('uploadZone');
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover') });
+        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('dragover');
+            handleUpload(e.dataTransfer.files[0]);
+        });
+        
+        async function handleUpload(file) {
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            document.getElementById('output').innerHTML = '<span class="info">⏳ Uploading...</span>';
+            
+            try {
+                const res = await fetch(`${API}/upload`, { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                if (data.error) {
+                    document.getElementById('output').innerHTML = `<span class="error">❌ ${data.error}</span>`;
+                    return;
+                }
+                
+                currentFile = data.filename;
+                document.getElementById('fileList').innerHTML = `
+                    <div class="file-chip">📄 ${data.filename} (${data.rows} rows, ${data.columns.length} cols)</div>
+                `;
+                document.getElementById('output').innerHTML = `
+                    <span class="success">✅ Uploaded: ${data.filename}</span>
+                    <span class="info">📊 ${data.rows} rows, Columns: ${data.columns.join(', ')}</span>
+                `;
+            } catch(e) {
+                document.getElementById('output').innerHTML = `<span class="error">❌ Upload failed: ${e.message}</span>`;
+            }
+        }
+        
+        async function runPipeline() {
+            const code = document.getElementById('codeInput').value;
+            if (!code) return alert('Write some Dapine code first!');
+            
+            document.getElementById('output').innerHTML = '<span class="info">⏳ Running pipeline...</span>';
+            
+            try {
+                const res = await fetch(`${API}/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ code, filename: currentFile || 'data.csv' })
+                });
+                const data = await res.json();
+                
+                let html = `<span class="success">✅ Pipeline ${data.pipeline_id} completed!</span>\n`;
+                if (data.stdout) html += data.stdout.replace(/\n/g, '<br>');
+                if (data.stderr) html += `\n<span class="error">${data.stderr}</span>`;
+                if (data.outputs?.length) html += `\n<span class="info">📁 Outputs: ${data.outputs.join(', ')}</span>`;
+                
+                document.getElementById('output').innerHTML = html;
+            } catch(e) {
+                document.getElementById('output').innerHTML = `<span class="error">❌ ${e.message}</span>`;
+            }
+        }
+        
+        function savePipeline() {
+            const code = document.getElementById('codeInput').value;
+            const blob = new Blob([code], {type:'text/plain'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'pipeline.dap';
+            a.click();
+        }
+        
+        // Keyboard shortcut
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey && e.key === 'Enter') runPipeline();
+        });
+    </script>
+</body>
+</html>
