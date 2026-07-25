@@ -120,6 +120,11 @@ def get_results(pipeline_id):
                     pass
     
     return jsonify({"pipeline_id": pipeline_id, "outputs": outputs})
+@app.route('/dashboard')
+def dashboard():
+    import os
+    dashboard_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cloud_dashboard.html')
+    return send_file(dashboard_path)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
