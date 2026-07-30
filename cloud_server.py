@@ -20,11 +20,12 @@ for d in [PIPELINES_DIR, UPLOADS_DIR]:
 def home():
     return jsonify({
         "name": "Dapine Cloud API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "endpoints": [
             "POST /api/upload - Upload CSV/Excel file",
             "POST /api/run - Run Dapine pipeline",
             "GET /api/pipelines - List saved pipelines",
+            "GET /api/outputs/<filename> - Download output files (charts, reports)",
         ]
     })
 
@@ -66,8 +67,6 @@ def run_pipeline():
         return jsonify({"error": "Code and filename required"}), 400
     
     uploaded_path = os.path.join(UPLOADS_DIR, filename)
-    
-    # Replace quoted filenames with full path
     code = re.sub(r'["\']([^"\']*\.(csv|xlsx|json))["\']', f'"{uploaded_path}"', code)
     
     if not code.strip().startswith('pipeline'):
@@ -84,12 +83,43 @@ def run_pipeline():
         capture_output=True, text=True, timeout=60
     )
     
+    # Find output files generated
+    outputs = []
+    for f in os.listdir('.'):
+        if f.endswith(('.html', '.json', '.csv', '.xlsx', '.md')):
+            if os.path.getmtime(f) > os.path.getmtime(pipeline_file) - 10:
+                outputs.append(f)
+    
     return jsonify({
         "pipeline_id": pipeline_id,
         "status": "completed",
         "stdout": result.stdout[-2000:],
         "stderr": result.stderr[:500],
+        "outputs": outputs,
+        "chart_url": f"/api/outputs/{outputs[0]}" if outputs else None
     })
+
+@app.route('/api/outputs/<filename>')
+def get_output(filename):
+    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+    if os.path.exists(filepath):
+        return send_file(filepath)
+    return jsonify({"error": "File not found"}), 404
+
+@app.route('/api/pipelines', methods=['GET'])
+def list_pipelines():
+    pipelines = []
+    for f in os.listdir(PIPELINES_DIR):
+        if f.endswith('.dap'):
+            path = os.path.join(PIPELINES_DIR, f)
+            with open(path, 'r') as pf:
+                code = pf.read()
+            pipelines.append({
+                "id": f.replace('.dap', ''),
+                "code": code[:200],
+                "created": datetime.fromtimestamp(os.path.getmtime(path)).isoformat()
+            })
+    return jsonify(sorted(pipelines, key=lambda x: x['created'], reverse=True))
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
