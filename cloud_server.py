@@ -25,7 +25,7 @@ def home():
             "POST /api/upload - Upload CSV/Excel file",
             "POST /api/run - Run Dapine pipeline",
             "GET /api/pipelines - List saved pipelines",
-            "GET /api/outputs/<filename> - Download output files (charts, reports)",
+            "GET /api/outputs/<filename> - Download output files",
         ]
     })
 
@@ -67,7 +67,8 @@ def run_pipeline():
         return jsonify({"error": "Code and filename required"}), 400
     
     uploaded_path = os.path.join(UPLOADS_DIR, filename)
-    code = re.sub(r'["\']([^"\']*\.(csv|xlsx|json))["\']', f'"{uploaded_path}"', code)
+    escaped_filename = re.escape(filename)
+    code = re.sub(f'["\']({escaped_filename})["\']', f'"{uploaded_path}"', code)
     
     if not code.strip().startswith('pipeline'):
         code = f'pipeline _cloud_run() {{\n{code}\n}}'
@@ -83,7 +84,6 @@ def run_pipeline():
         capture_output=True, text=True, timeout=60
     )
     
-    # Find output files generated
     outputs = []
     for f in os.listdir('.'):
         if f.endswith(('.html', '.json', '.csv', '.xlsx', '.md')):
