@@ -4,6 +4,7 @@ import os
 import json
 import csv
 import uuid
+import re
 from datetime import datetime
 
 app = Flask(__name__)
@@ -64,14 +65,11 @@ def run_pipeline():
     if not code or not filename:
         return jsonify({"error": "Code and filename required"}), 400
     
-    # Use the uploaded file path
     uploaded_path = os.path.join(UPLOADS_DIR, filename)
     
-    # Replace the filename in code with the full path
-    code = code.replace(f'"{filename}"', f'"{uploaded_path}"')
-    code = code.replace(f"'{filename}'", f"'{uploaded_path}'")
+    # Replace quoted filenames with full path
+    code = re.sub(r'["\']([^"\']*\.(csv|xlsx|json))["\']', f'"{uploaded_path}"', code)
     
-    # Wrap in pipeline if needed
     if not code.strip().startswith('pipeline'):
         code = f'pipeline _cloud_run() {{\n{code}\n}}'
     
@@ -83,14 +81,14 @@ def run_pipeline():
     import subprocess
     result = subprocess.run(
         ['python', 'dapine.py', pipeline_file],
-        capture_output=True, text=True, timeout=30
+        capture_output=True, text=True, timeout=60
     )
     
     return jsonify({
         "pipeline_id": pipeline_id,
         "status": "completed",
-        "stdout": result.stdout[-1000:],
-        "stderr": result.stderr[:300],
+        "stdout": result.stdout[-2000:],
+        "stderr": result.stderr[:500],
     })
 
 if __name__ == '__main__':
