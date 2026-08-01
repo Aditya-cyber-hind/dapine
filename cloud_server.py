@@ -6,24 +6,29 @@ import csv
 import uuid
 import re
 from datetime import datetime
+from incremental import Incremental
+from validator import Validator
 
 app = Flask(__name__)
 CORS(app)
 
 PIPELINES_DIR = "cloud_data/pipelines"
 UPLOADS_DIR = "cloud_data/uploads"
+STATE_DIR = "cloud_data/state"
 
-for d in [PIPELINES_DIR, UPLOADS_DIR]:
+for d in [PIPELINES_DIR, UPLOADS_DIR, STATE_DIR]:
     os.makedirs(d, exist_ok=True)
 
 @app.route('/')
 def home():
     return jsonify({
         "name": "Dapine Cloud API",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "endpoints": [
             "POST /api/upload - Upload CSV/Excel file",
             "POST /api/run - Run Dapine pipeline",
+            "POST /api/validate - Validate data quality",
+            "POST /api/incremental - Process only new data",
             "GET /api/pipelines - List saved pipelines",
             "GET /api/outputs/<filename> - Download output files",
         ]
@@ -38,18 +43,15 @@ def dashboard():
 def upload():
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
-    
     file = request.files['file']
     filename = file.filename
     filepath = os.path.join(UPLOADS_DIR, filename)
     file.save(filepath)
-    
     rows = []
     if filename.endswith('.csv'):
         with open(filepath, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             rows = [dict(row) for row in reader]
-    
     return jsonify({
         "filename": filename,
         "rows": len(rows),
@@ -62,34 +64,27 @@ def run_pipeline():
     data = request.json
     code = data.get('code', '')
     filename = data.get('filename', '')
-    
     if not code or not filename:
         return jsonify({"error": "Code and filename required"}), 400
-    
     uploaded_path = os.path.join(UPLOADS_DIR, filename)
     escaped_filename = re.escape(filename)
     code = re.sub(f'["\']({escaped_filename})["\']', f'"{uploaded_path}"', code)
-    
     if not code.strip().startswith('pipeline'):
         code = f'pipeline _cloud_run() {{\n{code}\n}}'
-    
     pipeline_id = str(uuid.uuid4())[:8]
     pipeline_file = os.path.join(PIPELINES_DIR, f"{pipeline_id}.dap")
     with open(pipeline_file, 'w', encoding='utf-8') as f:
         f.write(code)
-    
     import subprocess
     result = subprocess.run(
         ['python', 'dapine.py', pipeline_file],
         capture_output=True, text=True, timeout=60
     )
-    
     outputs = []
     for f in os.listdir('.'):
         if f.endswith(('.html', '.json', '.csv', '.xlsx', '.md')):
             if os.path.getmtime(f) > os.path.getmtime(pipeline_file) - 10:
                 outputs.append(f)
-    
     return jsonify({
         "pipeline_id": pipeline_id,
         "status": "completed",
@@ -120,6 +115,49 @@ def list_pipelines():
                 "created": datetime.fromtimestamp(os.path.getmtime(path)).isoformat()
             })
     return jsonify(sorted(pipelines, key=lambda x: x['created'], reverse=True))
+
+@app.route('/api/validate', methods=['POST'])
+def validate_data():
+    data = request.json
+    filename = data.get('filename', '')
+    rules = data.get('rules', [])
+    if not filename:
+        return jsonify({"error": "Filename required"}), 400
+    filepath = os.path.join(UPLOADS_DIR, filename)
+    if not os.path.exists(filepath):
+        return jsonify({"error": "File not found"}), 404
+    with open(filepath, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        rows = [dict(row) for row in reader]
+        columns = reader.fieldnames
+    quality = Validator.quick_stats(rows, columns)
+    passed, failed, errors = Validator.validate(rows, rules) if rules else (rows, [], [])
+    return jsonify({
+        "filename": filename,
+        "total_rows": len(rows),
+        "quality": quality,
+        "rules_passed": len(passed),
+        "rules_failed": len(failed),
+        "errors": errors[:10]
+    })
+
+@app.route('/api/incremental', methods=['POST'])
+def incremental_run():
+    data = request.json
+    filename = data.get('filename', '')
+    pipeline_name = data.get('pipeline', 'default')
+    inc = Incremental(STATE_DIR)
+    filepath = os.path.join(UPLOADS_DIR, filename)
+    if not inc.check_changed(filepath, pipeline_name):
+        return jsonify({"status": "no_change", "message": "No new data since last run"})
+    new_rows, total, count = inc.get_new_rows(filepath, pipeline_name)
+    inc.save_run(pipeline_name, total)
+    return jsonify({
+        "status": "processed",
+        "new_rows": count,
+        "total_rows": total,
+        "preview": new_rows[:3]
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
