@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date
 
 class ASTNode:
     pass
@@ -15,9 +15,10 @@ class Pipeline(ASTNode):
         self.line = line
 
 class Param(ASTNode):
-    def __init__(self, name, ptype):
+    def __init__(self, name, ptype, default=None):
         self.name = name
         self.ptype = ptype
+        self.default = default
 
 class Step(ASTNode):
     def __init__(self, operation, args, alias, line):
@@ -26,6 +27,7 @@ class Step(ASTNode):
         self.alias = alias
         self.line = line
 
+# ============ I/O STEPS ============
 class ReadStep(Step):
     def __init__(self, source, format_type, options, alias, line):
         super().__init__("read", [source, format_type], alias, line)
@@ -33,6 +35,20 @@ class ReadStep(Step):
         self.format_type = format_type
         self.options = options or {}
 
+class HttpReadStep(Step):
+    def __init__(self, url, format_type, alias, line):
+        super().__init__("http_read", [url, format_type], alias, line)
+        self.url = url
+        self.format_type = format_type
+
+class WriteStep(Step):
+    def __init__(self, input_ref, target, format_type, alias, line):
+        super().__init__("write", [input_ref, target, format_type], alias, line)
+        self.input_ref = input_ref
+        self.target = target
+        self.format_type = format_type
+
+# ============ TRANSFORM STEPS ============
 class FilterStep(Step):
     def __init__(self, input_ref, condition, alias, line):
         super().__init__("filter", [input_ref, condition], alias, line)
@@ -45,39 +61,12 @@ class SelectStep(Step):
         self.input_ref = input_ref
         self.columns = columns
 
-class JoinStep(Step):
-    def __init__(self, left_ref, right_ref, on_column, join_type, alias, line):
-        super().__init__("join", [left_ref, right_ref, on_column, join_type], alias, line)
-        self.left_ref = left_ref
-        self.right_ref = right_ref
-        self.on_column = on_column
-        self.join_type = join_type
-
-class WriteStep(Step):
-    def __init__(self, input_ref, target, format_type, alias, line):
-        super().__init__("write", [input_ref, target, format_type], alias, line)
-        self.input_ref = input_ref
-        self.target = target
-        self.format_type = format_type
-
-class GroupStep(Step):
-    def __init__(self, input_ref, key_column, aggregations, alias, line):
-        super().__init__("group", [input_ref, key_column, aggregations], alias, line)
-        self.input_ref = input_ref
-        self.key_column = key_column
-        self.aggregations = aggregations
-
 class SortStep(Step):
     def __init__(self, input_ref, column, direction, alias, line):
         super().__init__("sort", [input_ref, column, direction], alias, line)
         self.input_ref = input_ref
         self.column = column
         self.direction = direction
-
-class DistinctStep(Step):
-    def __init__(self, input_ref, alias, line):
-        super().__init__("distinct", [input_ref], alias, line)
-        self.input_ref = input_ref
 
 class LimitStep(Step):
     def __init__(self, input_ref, count, alias, line):
@@ -92,22 +81,163 @@ class MutateStep(Step):
         self.new_column = new_column
         self.expression = expression
 
-class UnionStep(Step):
-    def __init__(self, left_ref, right_ref, alias, line):
-        super().__init__("union", [left_ref, right_ref], alias, line)
-        self.left_ref = left_ref
-        self.right_ref = right_ref
-
 class RenameStep(Step):
     def __init__(self, input_ref, renames, alias, line):
         super().__init__("rename", [input_ref, renames], alias, line)
         self.input_ref = input_ref
         self.renames = renames
 
+class CastStep(Step):
+    def __init__(self, input_ref, column, new_type, alias, line):
+        super().__init__("cast", [input_ref, column, new_type], alias, line)
+        self.input_ref = input_ref
+        self.column = column
+        self.new_type = new_type
+
+class SampleStep(Step):
+    def __init__(self, input_ref, percent, alias, line):
+        super().__init__("sample", [input_ref, percent], alias, line)
+        self.input_ref = input_ref
+        self.percent = percent
+
+class DistinctStep(Step):
+    def __init__(self, input_ref, alias, line):
+        super().__init__("distinct", [input_ref], alias, line)
+        self.input_ref = input_ref
+
+# ============ AGGREGATE STEPS ============
+class GroupStep(Step):
+    def __init__(self, input_ref, key_column, aggregations, alias, line):
+        super().__init__("group", [input_ref, key_column, aggregations], alias, line)
+        self.input_ref = input_ref
+        self.key_column = key_column
+        self.aggregations = aggregations
+
+class JoinStep(Step):
+    def __init__(self, left_ref, right_ref, on_column, join_type, alias, line):
+        super().__init__("join", [left_ref, right_ref, on_column, join_type], alias, line)
+        self.left_ref = left_ref
+        self.right_ref = right_ref
+        self.on_column = on_column
+        self.join_type = join_type
+
+class UnionStep(Step):
+    def __init__(self, left_ref, right_ref, alias, line):
+        super().__init__("union", [left_ref, right_ref], alias, line)
+        self.left_ref = left_ref
+        self.right_ref = right_ref
+
+# ============ NEW: WINDOW ============
+class WindowStep(Step):
+    def __init__(self, input_ref, func, column, partition_by, order_by, alias, line):
+        super().__init__("window", [input_ref, func, column], alias, line)
+        self.input_ref = input_ref
+        self.func = func
+        self.column = column
+        self.partition_by = partition_by
+        self.order_by = order_by
+
+# ============ NEW: PIVOT ============
+class PivotStep(Step):
+    def __init__(self, input_ref, key_col, value_col, agg_func, alias, line):
+        super().__init__("pivot", [input_ref, key_col, value_col], alias, line)
+        self.input_ref = input_ref
+        self.key_col = key_col
+        self.value_col = value_col
+        self.agg_func = agg_func
+
+# ============ NEW: CTE ============
+class CTEStep(Step):
+    def __init__(self, name, body, line):
+        super().__init__("define", [name], None, line)
+        self.name = name
+        self.body = body
+
+# ============ NEW: TRY/CATCH ============
+class TryStep(Step):
+    def __init__(self, try_body, catch_body, alias, line):
+        super().__init__("try", [], alias, line)
+        self.try_body = try_body
+        self.catch_body = catch_body
+
+# ============ OUTPUT STEPS ============
 class PrintStep(Step):
     def __init__(self, input_ref, line):
         super().__init__("print", [input_ref], None, line)
         self.input_ref = input_ref
+
+class StatsStep(Step):
+    def __init__(self, input_ref, alias, line):
+        super().__init__("stats", [input_ref], alias, line)
+        self.input_ref = input_ref
+
+class ChartStep(Step):
+    def __init__(self, input_ref, chart_type, label_col, value_col, title, target, alias, line):
+        super().__init__("chart", [input_ref, chart_type, label_col, value_col], alias, line)
+        self.input_ref = input_ref
+        self.chart_type = chart_type
+        self.label_col = label_col
+        self.value_col = value_col
+        self.title = title
+        self.target = target
+
+class ReportStep(Step):
+    def __init__(self, input_ref, title, target, alias, line):
+        super().__init__("report", [input_ref, title, target], alias, line)
+        self.input_ref = input_ref
+        self.title = title
+        self.target = target
+
+# ============ NEW: EXPORT STEPS ============
+class ExportStep(Step):
+    def __init__(self, input_ref, format_type, target, alias, line):
+        super().__init__("export", [input_ref, format_type, target], alias, line)
+        self.input_ref = input_ref
+        self.format_type = format_type
+        self.target = target
+
+class EmailStep(Step):
+    def __init__(self, input_ref, to_address, subject, alias, line):
+        super().__init__("email", [input_ref, to_address], alias, line)
+        self.input_ref = input_ref
+        self.to_address = to_address
+        self.subject = subject
+
+class SlackStep(Step):
+    def __init__(self, input_ref, channel, alias, line):
+        super().__init__("slack", [input_ref, channel], alias, line)
+        self.input_ref = input_ref
+        self.channel = channel
+
+class S3Step(Step):
+    def __init__(self, input_ref, bucket_path, alias, line):
+        super().__init__("upload", [input_ref, bucket_path], alias, line)
+        self.input_ref = input_ref
+        self.bucket_path = bucket_path
+
+# ============ ML STEPS ============
+class TrainStep(Step):
+    def __init__(self, input_ref, target_col, model_type, model_name, alias, line):
+        super().__init__("train", [input_ref, target_col, model_type], alias, line)
+        self.input_ref = input_ref
+        self.target_col = target_col
+        self.model_type = model_type
+        self.model_name = model_name
+
+class PredictStep(Step):
+    def __init__(self, input_ref, model_name, output_col, alias, line):
+        super().__init__("predict", [input_ref, model_name], alias, line)
+        self.input_ref = input_ref
+        self.model_name = model_name
+        self.output_col = output_col
+
+# ============ CONTROL FLOW ============
+class LetStep(Step):
+    def __init__(self, var_name, var_type, value, alias, line):
+        super().__init__("let", [var_name, value], alias, line)
+        self.var_name = var_name
+        self.var_type = var_type
+        self.value = value
 
 class IfStep(Step):
     def __init__(self, condition, if_body, else_body, alias, line):
@@ -115,23 +245,6 @@ class IfStep(Step):
         self.condition = condition
         self.if_body = if_body
         self.else_body = else_body
-
-class HttpReadStep(Step):
-    def __init__(self, url, format_type, alias, line):
-        super().__init__("http_read", [url, format_type], alias, line)
-        self.url = url
-        self.format_type = format_type
-
-class ImportStep(Step):
-    def __init__(self, filepath, line):
-        super().__init__("import", [filepath], None, line)
-        self.filepath = filepath
-
-class LetStep(Step):
-    def __init__(self, var_name, value, alias, line):
-        super().__init__("let", [var_name, value], alias, line)
-        self.var_name = var_name
-        self.value = value
 
 class ForStep(Step):
     def __init__(self, row_var, input_ref, body, alias, line):
@@ -153,23 +266,43 @@ class CaseClause(ASTNode):
         self.value = value
         self.body = body
 
-class CastStep(Step):
-    def __init__(self, input_ref, column, new_type, alias, line):
-        super().__init__("cast", [input_ref, column, new_type], alias, line)
-        self.input_ref = input_ref
-        self.column = column
-        self.new_type = new_type
+# ============ OTHER ============
+class ImportStep(Step):
+    def __init__(self, filepath, line):
+        super().__init__("import", [filepath], None, line)
+        self.filepath = filepath
 
-class SampleStep(Step):
-    def __init__(self, input_ref, percent, alias, line):
-        super().__init__("sample", [input_ref, percent], alias, line)
-        self.input_ref = input_ref
-        self.percent = percent
+class AlertStep(Step):
+    def __init__(self, message, title, line):
+        super().__init__("alert", [message, title], None, line)
+        self.message = message
+        self.title = title
 
-class StatsStep(Step):
-    def __init__(self, input_ref, alias, line):
-        super().__init__("stats", [input_ref], alias, line)
+class DBReadStep(Step):
+    def __init__(self, connection_string, query, alias, line):
+        super().__init__("db_read", [connection_string, query], alias, line)
+        self.connection_string = connection_string
+        self.query = query
+
+class DBWriteStep(Step):
+    def __init__(self, input_ref, connection_string, table_name, alias, line):
+        super().__init__("db_write", [input_ref, connection_string, table_name], alias, line)
         self.input_ref = input_ref
+        self.connection_string = connection_string
+        self.table_name = table_name
+
+class ExcelReadStep(Step):
+    def __init__(self, source, sheet_name, alias, line):
+        super().__init__("excel_read", [source], alias, line)
+        self.source = source
+        self.sheet_name = sheet_name
+
+class ExcelWriteStep(Step):
+    def __init__(self, input_ref, target, sheet_name, alias, line):
+        super().__init__("excel_write", [input_ref, target], alias, line)
+        self.input_ref = input_ref
+        self.target = target
+        self.sheet_name = sheet_name
 
 class Aggregation(ASTNode):
     def __init__(self, func, column, output_name):
@@ -177,6 +310,7 @@ class Aggregation(ASTNode):
         self.column = column
         self.output_name = output_name
 
+# ============ EXPRESSIONS ============
 class BinaryOp(ASTNode):
     def __init__(self, left, op, right):
         self.left = left
@@ -206,7 +340,7 @@ class BooleanLiteral(ASTNode):
 
 class DateLiteral(ASTNode):
     def __init__(self, value):
-        self.value = value  # date object
+        self.value = value
 
 class NullLiteral(ASTNode):
     pass
@@ -234,73 +368,23 @@ class FuncDef(ASTNode):
         self.params = params
         self.body_expr = body_expr
         self.line = line
-class ChartStep(Step):
-    def __init__(self, input_ref, chart_type, label_col, value_col, title, target, alias, line):
-        super().__init__("chart", [input_ref, chart_type, label_col, value_col], alias, line)
-        self.input_ref = input_ref
-        self.chart_type = chart_type
-        self.label_col = label_col
-        self.value_col = value_col
-        self.title = title
-        self.target = target
-class ChartStep(Step):
-    def __init__(self, input_ref, chart_type, label_col, value_col, title, target, alias, line):
-        super().__init__("chart", [input_ref, chart_type, label_col, value_col], alias, line)
-        self.input_ref = input_ref
-        self.chart_type = chart_type
-        self.label_col = label_col
-        self.value_col = value_col
-        self.title = title
-        self.target = target
 
-class TrainStep(Step):
-    def __init__(self, input_ref, target_col, model_type, model_name, alias, line):
-        super().__init__("train", [input_ref, target_col, model_type], alias, line)
-        self.input_ref = input_ref
-        self.target_col = target_col
-        self.model_type = model_type
-        self.model_name = model_name
+# ============ NEW: Lambda ============
+class LambdaExpr(ASTNode):
+    def __init__(self, params, body):
+        self.params = params
+        self.body = body
 
-class PredictStep(Step):
-    def __init__(self, input_ref, model_name, output_col, alias, line):
-        super().__init__("predict", [input_ref, model_name], alias, line)
-        self.input_ref = input_ref
-        self.model_name = model_name
-        self.output_col = output_col
-class DBReadStep(Step):
-    def __init__(self, connection_string, query, alias, line):
-        super().__init__("db_read", [connection_string, query], alias, line)
-        self.connection_string = connection_string
-        self.query = query
+# ============ NEW: Array & Dict ============
+class ArrayLiteral(ASTNode):
+    def __init__(self, elements):
+        self.elements = elements
 
-class DBWriteStep(Step):
-    def __init__(self, input_ref, connection_string, table_name, alias, line):
-        super().__init__("db_write", [input_ref, connection_string, table_name], alias, line)
-        self.input_ref = input_ref
-        self.connection_string = connection_string
-        self.table_name = table_name
+class DictLiteral(ASTNode):
+    def __init__(self, pairs):
+        self.pairs = pairs
 
-class ExcelReadStep(Step):
-    def __init__(self, source, sheet_name, alias, line):
-        super().__init__("excel_read", [source], alias, line)
-        self.source = source
-        self.sheet_name = sheet_name
-
-class ExcelWriteStep(Step):
-    def __init__(self, input_ref, target, sheet_name, alias, line):
-        super().__init__("excel_write", [input_ref, target], alias, line)
-        self.input_ref = input_ref
-        self.target = target
-        self.sheet_name = sheet_name
-
-class ReportStep(Step):
-    def __init__(self, input_ref, title, target, alias, line):
-        super().__init__("report", [input_ref, title, target], alias, line)
-        self.input_ref = input_ref
-        self.title = title
-        self.target = target
-class AlertStep(Step):
-    def __init__(self, message, title, line):
-        super().__init__("alert", [message, title], None, line)
-        self.message = message
-        self.title = title
+# ============ NEW: Template String ============
+class TemplateString(ASTNode):
+    def __init__(self, parts):
+        self.parts = parts

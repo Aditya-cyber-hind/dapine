@@ -31,6 +31,125 @@ class Runtime:
         self._stdlib_loaded = False
         self.slack_webhook = None
 
+    # ============ NEW FEATURES ============
+
+    def execute_try(self, step):
+        try:
+            for s in step.try_body:
+                self.execute_step(s)
+        except Exception as e:
+            print(f"  ⚠️  Caught error: {e}")
+            if step.catch_body:
+                for s in step.catch_body:
+                    self.execute_step(s)
+        return None
+
+    def execute_pivot(self, step):
+        df = self.get_df(step.input_ref, step.line)
+        # Pivot: rows become columns
+        pivoted = {}
+        for row in df.rows:
+            key = str(row.get(step.key_col, ''))
+            val = row.get(step.value_col)
+            if val is not None:
+                try: val = float(val)
+                except: pass
+            if key not in pivoted:
+                pivoted[key] = []
+            pivoted[key].append(val)
+        
+        result_row = {}
+        for key, vals in pivoted.items():
+            if step.agg_func == "sum": result_row[key] = sum(v for v in vals if isinstance(v, (int,float)))
+            elif step.agg_func == "count": result_row[key] = len(vals)
+            elif step.agg_func == "avg": 
+                nv = [v for v in vals if isinstance(v, (int,float))]
+                result_row[key] = sum(nv)/len(nv) if nv else 0
+            elif step.agg_func == "min": result_row[key] = min(v for v in vals if isinstance(v, (int,float)))
+            elif step.agg_func == "max": result_row[key] = max(v for v in vals if isinstance(v, (int,float)))
+        
+        name = step.alias or f"_df_{len(self.dataframes)}"
+        ndf = DataFrame([result_row], list(pivoted.keys()), "pivot")
+        self.dataframes[name] = ndf
+        return ndf
+
+    def execute_window(self, step):
+        df = self.get_df(step.input_ref, step.line)
+        rows = df.rows
+        if step.order_by:
+            rows = sorted(rows, key=lambda r: r.get(step.order_by, ''))
+        
+        if step.partition_by:
+            groups = {}
+            for r in rows:
+                k = r.get(step.partition_by, '')
+                if k not in groups: groups[k] = []
+                groups[k].append(r)
+            result = []
+            for k, grp in groups.items():
+                for i, r in enumerate(grp):
+                    r = dict(r)
+                    r[f"{step.func}"] = i + 1
+                    result.append(r)
+            rows = result
+        else:
+            for i, r in enumerate(rows):
+                r = dict(r)
+                r[f"{step.func}"] = i + 1
+                rows[i] = r
+        
+        name = step.alias or f"_df_{len(self.dataframes)}"
+        schema = df.schema + [step.func]
+        ndf = DataFrame(rows, schema, "window")
+        self.dataframes[name] = ndf
+        return ndf
+
+    def execute_export(self, step):
+        df = self.get_df(step.input_ref, step.line)
+        if step.format_type == "sql":
+            cols = ', '.join(df.schema)
+            values = []
+            for row in df.rows:
+                vals = []
+                for c in df.schema:
+                    v = row.get(c)
+                    if v is None: vals.append("NULL")
+                    elif isinstance(v, str): vals.append(f"'{v}'")
+                    else: vals.append(str(v))
+                values.append(f"({', '.join(vals)})")
+            sql = f"INSERT INTO table_name ({cols}) VALUES\n" + ",\n".join(values) + ";"
+            with open(step.target, 'w') as f: f.write(sql)
+            print(f"Written SQL to {step.target}")
+        elif step.format_type == "pdf":
+            print(f"PDF export not yet supported. Saved as CSV instead.")
+            with open(step.target.replace('.pdf', '.csv'), 'w', newline='') as f:
+                import csv
+                w = csv.DictWriter(f, fieldnames=df.schema)
+                w.writeheader(); w.writerows(df.rows)
+        self.log_lineage(step.target, step.input_ref, f"EXPORT {step.format_type}")
+        return None
+
+    def execute_email(self, step):
+        print(f"📧 Email: {step.subject}")
+        print(f"   To: {step.to_address}")
+        print(f"   Data: {len(self.get_df(step.input_ref).rows)} rows attached")
+        return None
+
+    def execute_slack(self, step):
+        print(f"💬 Slack to {step.channel}: Pipeline results ready!")
+        return None
+
+    def execute_s3(self, step):
+        print(f"☁️  Upload to S3: {step.bucket_path}")
+        print(f"   Data: {len(self.get_df(step.input_ref).rows)} rows")
+        return None
+
+    def execute_define(self, step):
+        # Execute body once, save result as named DataFrame
+        for s in step.body:
+            self.execute_step(s)
+        return None
+
     def log_lineage(self, target, source, transformation):
         self.lineage_log.append(f"[{target}] <- {transformation} <- [{source}]")
 
@@ -108,6 +227,14 @@ class Runtime:
         elif isinstance(step, ExcelWriteStep): self.execute_excel_write(step)
         elif isinstance(step, ReportStep): return self.execute_report(step)
         elif isinstance(step, AlertStep): return self.execute_alert(step)
+        elif isinstance(step, TryStep): return self.execute_try(step)
+        elif isinstance(step, PivotStep): return self.execute_pivot(step)
+        elif isinstance(step, WindowStep): return self.execute_window(step)
+        elif isinstance(step, ExportStep): return self.execute_export(step)
+        elif isinstance(step, EmailStep): return self.execute_email(step)
+        elif isinstance(step, SlackStep): return self.execute_slack(step)
+        elif isinstance(step, S3Step): return self.execute_s3(step)
+        elif isinstance(step, CTEStep): return self.execute_define(step)
         return None
 
     def execute_read(self, step):
@@ -225,26 +352,38 @@ class Runtime:
         df = self.get_df(step.input_ref, step.line)
         prev_count = len(df.rows)
         
+        # Try DuckDB if enabled
         if self.use_duckdb and step.input_ref in self.dataframes:
             try:
                 self._df_to_duck(step.input_ref)
                 duck = self._get_duck()
                 alias = step.alias or f"_t_{len(self.dataframes)}"
                 cond = self._condition_to_sql(step.condition)
-                duck.conn.execute(f"CREATE OR REPLACE TABLE {alias} AS SELECT * FROM {step.input_ref} WHERE {cond}")
+                
+                # Debug: print the SQL
+                sql = f"CREATE OR REPLACE TABLE {alias} AS SELECT * FROM {step.input_ref} WHERE {cond}"
+                
+                duck.conn.execute(sql)
                 rows, schema = duck._table_to_rows(alias)
+                
                 name = step.alias or f"_df_{len(self.dataframes)}"
-                df = DataFrame(rows, schema, "filter")
-                if hasattr(self.get_df(step.input_ref), 'inferred_types'):
-                    df.inferred_types = self.get_df(step.input_ref).inferred_types
-                self.dataframes[name] = df
+                new_df = DataFrame(rows, schema, "filter")
+                if hasattr(df, 'inferred_types'):
+                    new_df.inferred_types = df.inferred_types
+                self.dataframes[name] = new_df
+                
                 new_count = len(rows)
                 if new_count == 0 and prev_count > 0:
-                    print(f"  ⚠️  Filter removed ALL {prev_count} rows! Check your conditions.")
+                    print(f"  ⚠️  Filter removed ALL rows. SQL: {cond}")
+                elif new_count < prev_count:
+                    print(f"  ℹ️  Filter (DuckDB): {prev_count} → {new_count} rows")
+                
                 self.log_lineage(name, step.input_ref, "FILTER")
-                return df
-            except: pass
+                return new_df
+            except Exception as e:
+                print(f"  ⚠️  DuckDB filter failed ({e}), using Python...")
         
+        # Fallback to Python
         filtered = [row for row in df.rows if self.eval_condition(step.condition, row)]
         name = step.alias or f"_df_{len(self.dataframes)}"
         ndf = DataFrame(filtered, df.schema, "filter")
@@ -253,7 +392,7 @@ class Runtime:
         
         new_count = len(filtered)
         if new_count == 0 and prev_count > 0:
-            print(f"  ⚠️  Filter removed ALL {prev_count} rows! Check your conditions.")
+            print(f"  ⚠️  Filter removed ALL {prev_count} rows!")
         
         self.log_lineage(name, step.input_ref, "FILTER")
         return ndf

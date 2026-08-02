@@ -1,12 +1,14 @@
-pipeline excel_control_test() {
+pipeline core3_excel_control_outputs() {
     read "houses.csv" as raw
 
-    excel write raw into "houses_export.xlsx"
-    excel read "houses_export.xlsx" as reloaded
+    excel write raw into "core3_export.xlsx"
+    excel read "core3_export.xlsx" as reloaded
     print reloaded
 
-    let min_price = 300000
-    filter reloaded where price >= min_price as expensive
+    let threshold = 300000
+
+    filter reloaded where price >= threshold as expensive
+    filter reloaded where price < threshold as affordable
 
     group expensive by bedrooms [
         count(price) as total,
@@ -14,7 +16,19 @@ pipeline excel_control_test() {
     ] as summary
 
     print summary
-    write summary into "excel_output.json"
-    excel write summary into "excel_output.xlsx"
-    chart summary total by bedrooms as pie into "excel_chart.html"
+
+    group affordable by bedrooms [
+        count(price) as total,
+        avg(price) as avg_price
+    ] as affordable_summary
+
+    print affordable_summary
+
+    write summary into "core3_summary.json"
+    write affordable_summary into "core3_affordable.json"
+    excel write summary into "core3_summary.xlsx"
+    excel write affordable_summary into "core3_affordable.xlsx"
+    report summary as "Core 3 - Expensive Homes" into "core3_report.md"
+    chart summary total by bedrooms as pie into "core3_pie.html"
+    chart affordable_summary total by bedrooms as line into "core3_line.html"
 }

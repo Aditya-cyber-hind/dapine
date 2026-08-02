@@ -17,13 +17,14 @@ class Interpreter:
                 self.execute_import(statement)
             elif isinstance(statement, FuncDef):
                 self.runtime.functions[statement.name] = statement
+            elif isinstance(statement, CTEStep):
+                self.runtime.execute_define(statement)
         return results
 
     def execute_import(self, step):
         filepath = step.filepath
         if not os.path.exists(filepath):
-            raise RuntimeError(f"Import file not found: '{filepath}'", step.line,
-                             hint="Check the file path and make sure it exists")
+            raise RuntimeError(f"Import file not found: '{filepath}'", step.line)
         with open(filepath, "r") as f:
             source = f.read()
         from lexer import Lexer
@@ -40,25 +41,20 @@ class Interpreter:
         print(f"\n{'='*60}")
         print(f"  🚀 Running pipeline: {pipeline.name}")
         print(f"{'='*60}")
-        
         result = None
         step_count = 0
         total_steps = len(pipeline.steps)
         total_time = 0
-        
         for step in pipeline.steps:
             step_count += 1
             start_time = time.time()
-            
             try:
                 result = self.execute_step(step)
                 elapsed = time.time() - start_time
                 total_time += elapsed
-                
                 progress = int((step_count / total_steps) * 20)
                 bar = '█' * progress + '░' * (20 - progress)
                 pct = int((step_count / total_steps) * 100)
-                
                 if result is not None:
                     if hasattr(result, 'rows'):
                         print(f"  [{bar}] {pct}% | Step {step_count}: {step.operation} → {len(result.rows)} rows ({elapsed:.3f}s)")
@@ -66,79 +62,56 @@ class Interpreter:
                         print(f"  [{bar}] {pct}% | Step {step_count}: {step.operation} ({elapsed:.3f}s)")
                 else:
                     print(f"  [{bar}] {pct}% | Step {step_count}: {step.operation} ({elapsed:.3f}s)")
-                    
             except DapineError as e:
                 print(f"  ❌ Step {step_count} failed: {step.operation}")
                 raise
-        
         print(f"\n{'='*60}")
         print(f"  ✅ Pipeline '{pipeline.name}' completed: {step_count} steps in {total_time:.2f}s")
         print(f"  📋 Lineage: {len(self.runtime.lineage_log)} transformations tracked")
-        print(f"  ⚡ Avg: {total_time/step_count*1000:.1f}ms per step")
+        if step_count > 0:
+            print(f"  ⚡ Avg: {total_time/step_count*1000:.1f}ms per step")
         print(f"{'='*60}")
         return result
 
     def execute_step(self, step):
-        if isinstance(step, ReadStep):
-            return self.runtime.execute_read(step)
-        elif isinstance(step, HttpReadStep):
-            return self.runtime.execute_http_read(step)
-        elif isinstance(step, FilterStep):
-            return self.runtime.execute_filter(step)
-        elif isinstance(step, SelectStep):
-            return self.runtime.execute_select(step)
-        elif isinstance(step, JoinStep):
-            return self.runtime.execute_join(step)
-        elif isinstance(step, GroupStep):
-            return self.runtime.execute_group(step)
-        elif isinstance(step, WriteStep):
-            self.runtime.execute_write(step)
-        elif isinstance(step, SortStep):
-            return self.runtime.execute_sort(step)
-        elif isinstance(step, DistinctStep):
-            return self.runtime.execute_distinct(step)
-        elif isinstance(step, LimitStep):
-            return self.runtime.execute_limit(step)
-        elif isinstance(step, MutateStep):
-            return self.runtime.execute_mutate(step)
-        elif isinstance(step, UnionStep):
-            return self.runtime.execute_union(step)
-        elif isinstance(step, RenameStep):
-            return self.runtime.execute_rename(step)
-        elif isinstance(step, PrintStep):
-            return self.runtime.execute_print(step)
-        elif isinstance(step, LetStep):
-            return self.runtime.execute_let(step)
-        elif isinstance(step, ForStep):
-            return self.runtime.execute_for(step)
-        elif isinstance(step, CaseStep):
-            return self.runtime.execute_case(step)
-        elif isinstance(step, CastStep):
-            return self.runtime.execute_cast(step)
-        elif isinstance(step, SampleStep):
-            return self.runtime.execute_sample(step)
-        elif isinstance(step, StatsStep):
-            return self.runtime.execute_stats(step)
-        elif isinstance(step, IfStep):
-            return self.runtime.execute_if(step)
-        elif isinstance(step, ChartStep):
-            return self.runtime.execute_chart(step)
-        elif isinstance(step, TrainStep):
-            return self.runtime.execute_train(step)
-        elif isinstance(step, PredictStep):
-            return self.runtime.execute_predict(step)
-        elif isinstance(step, DBReadStep):
-            return self.runtime.execute_db_read(step)
-        elif isinstance(step, DBWriteStep):
-            self.runtime.execute_db_write(step)
-        elif isinstance(step, ExcelReadStep):
-            return self.runtime.execute_excel_read(step)
-        elif isinstance(step, ExcelWriteStep):
-            self.runtime.execute_excel_write(step)
-        elif isinstance(step, ReportStep):
-            return self.runtime.execute_report(step)
-        elif isinstance(step, AlertStep):
-            return self.runtime.execute_alert(step)
+        if isinstance(step, ReadStep): return self.runtime.execute_read(step)
+        elif isinstance(step, HttpReadStep): return self.runtime.execute_http_read(step)
+        elif isinstance(step, FilterStep): return self.runtime.execute_filter(step)
+        elif isinstance(step, SelectStep): return self.runtime.execute_select(step)
+        elif isinstance(step, JoinStep): return self.runtime.execute_join(step)
+        elif isinstance(step, GroupStep): return self.runtime.execute_group(step)
+        elif isinstance(step, WriteStep): self.runtime.execute_write(step)
+        elif isinstance(step, SortStep): return self.runtime.execute_sort(step)
+        elif isinstance(step, DistinctStep): return self.runtime.execute_distinct(step)
+        elif isinstance(step, LimitStep): return self.runtime.execute_limit(step)
+        elif isinstance(step, MutateStep): return self.runtime.execute_mutate(step)
+        elif isinstance(step, UnionStep): return self.runtime.execute_union(step)
+        elif isinstance(step, RenameStep): return self.runtime.execute_rename(step)
+        elif isinstance(step, PrintStep): return self.runtime.execute_print(step)
+        elif isinstance(step, LetStep): return self.runtime.execute_let(step)
+        elif isinstance(step, CastStep): return self.runtime.execute_cast(step)
+        elif isinstance(step, SampleStep): return self.runtime.execute_sample(step)
+        elif isinstance(step, StatsStep): return self.runtime.execute_stats(step)
+        elif isinstance(step, IfStep): return self.runtime.execute_if(step)
+        elif isinstance(step, ChartStep): return self.runtime.execute_chart(step)
+        elif isinstance(step, TrainStep): return self.runtime.execute_train(step)
+        elif isinstance(step, PredictStep): return self.runtime.execute_predict(step)
+        elif isinstance(step, DBReadStep): return self.runtime.execute_db_read(step)
+        elif isinstance(step, DBWriteStep): self.runtime.execute_db_write(step)
+        elif isinstance(step, ExcelReadStep): return self.runtime.execute_excel_read(step)
+        elif isinstance(step, ExcelWriteStep): self.runtime.execute_excel_write(step)
+        elif isinstance(step, ReportStep): return self.runtime.execute_report(step)
+        elif isinstance(step, AlertStep): return self.runtime.execute_alert(step)
+        elif isinstance(step, ForStep): return self.runtime.execute_for(step)
+        elif isinstance(step, CaseStep): return self.runtime.execute_case(step)
+        elif isinstance(step, TryStep): return self.runtime.execute_try(step)
+        elif isinstance(step, PivotStep): return self.runtime.execute_pivot(step)
+        elif isinstance(step, WindowStep): return self.runtime.execute_window(step)
+        elif isinstance(step, ExportStep): return self.runtime.execute_export(step)
+        elif isinstance(step, EmailStep): return self.runtime.execute_email(step)
+        elif isinstance(step, SlackStep): return self.runtime.execute_slack(step)
+        elif isinstance(step, S3Step): return self.runtime.execute_s3(step)
+        elif isinstance(step, CTEStep): return self.runtime.execute_define(step)
         else:
             raise RuntimeError(f"Unknown step: {step.operation}", step.line)
         return None

@@ -1,5 +1,6 @@
-pipeline ml_api_test() {
+pipeline core2_ml_api_advanced() {
     read "houses.csv" as raw
+    print raw
 
     http read "https://randomuser.me/api/?results=2" as json as users
     print users
@@ -15,7 +16,19 @@ pipeline ml_api_test() {
     select bedrooms, bathrooms, sqft, price, prediction from dt_pred as ml_results
     print ml_results
 
-    write ml_results into "ml_output.json"
-    excel write ml_results into "ml_output.xlsx"
-    chart ml_results price by sqft as scatter into "ml_scatter.html"
+    pivot raw rows to columns by bedrooms sum price as pivoted
+    print pivoted
+
+    export ml_results as sql into "core2_export.sql"
+
+    try {
+        read "nonexistent.csv" as bad
+    } catch {
+        let error_msg = "File not found, continuing..."
+    }
+
+    write ml_results into "core2_ml.json"
+    excel write ml_results into "core2_ml.xlsx"
+    chart ml_results price by sqft as scatter into "core2_scatter.html"
+    chart ml_results price by bedrooms as bar into "core2_bar.html"
 }

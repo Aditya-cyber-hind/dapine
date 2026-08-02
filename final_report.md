@@ -1,76 +1,80 @@
-# Dapine Ultimate Strength Test Results
+# Ultimate Dapine Test
 
-**Generated:** 2026-07-19 19:16:15  
-**Rows:** 0  
-**Columns:** beds, total_homes, total_cost, avg_cost, cheapest, most_expensive, avg_ppsf
+**Generated:** 2026-08-01 11:13:56  
+**Rows:** 2  
+**Columns:** beds, homes, avg_cost, cheapest, priciest
 
 ---
 
 ## Data Preview
 
+| beds | homes | avg_cost | cheapest | priciest |
+| --- | --- | --- | --- | --- |
+| 5 | 2 | 575000.0 | 550000.0 | 600000.0 |
+| 4 | 1 | 500000.0 | 500000.0 | 500000.0 |
 
 ---
 
 ## Column Statistics
+
+### homes
+- **Min:** 1
+- **Max:** 2
+- **Mean:** 1.50
+- **Median:** 1.50
+- **Std Dev:** 0.71
+
+### avg_cost
+- **Min:** 500000.0
+- **Max:** 575000.0
+- **Mean:** 537500.00
+- **Median:** 537500.00
+- **Std Dev:** 53033.01
+
+### cheapest
+- **Min:** 500000.0
+- **Max:** 550000.0
+- **Mean:** 525000.00
+- **Median:** 525000.00
+- **Std Dev:** 35355.34
+
+### priciest
+- **Min:** 500000.0
+- **Max:** 600000.0
+- **Mean:** 550000.00
+- **Median:** 550000.00
+- **Std Dev:** 70710.68
 
 ---
 
 ## Data Lineage
 
 - [raw] <- READ CSV <- [houses.csv]
-- [in_range] <- FILTER <- [raw]
-- [big_enough] <- FILTER <- [in_range]
-- [nice] <- FILTER <- [big_enough]
-- [spacious] <- FILTER <- [nice]
-- [not_exact] <- FILTER <- [spacious]
-- [either_or] <- FILTER <- [not_exact]
-- [exact_price] <- FILTER <- [raw]
 - [affordable] <- FILTER <- [raw]
-- [by_price_desc] <- SORT BY price desc <- [either_or]
-- [by_sqft_asc] <- SORT BY sqft asc <- [either_or]
-- [top5] <- LIMIT 5 <- [by_price_desc]
-- [m1] <- MUTATE add doubled <- [top5]
+- [big] <- FILTER <- [affordable]
+- [nice] <- FILTER <- [big]
+- [spacious] <- FILTER <- [nice]
+- [by_price] <- SORT <- [spacious]
+- [top3] <- LIMIT <- [by_price]
+- [m1] <- MUTATE add doubled <- [top3]
 - [m2] <- MUTATE add tripled <- [m1]
 - [m3] <- MUTATE add price_per_sqft <- [m2]
 - [m4] <- MUTATE add luxury_score <- [m3]
-- [m5] <- MUTATE add half_price <- [m4]
-- [m6] <- MUTATE add bonus_price <- [m5]
-- [m7] <- MUTATE add millions <- [m6]
-- [m8] <- MUTATE add bed_squared <- [m7]
-- [m9] <- MUTATE add ppb <- [m8]
-- [m10] <- MUTATE add root_sqft <- [m9]
-- [m11] <- MUTATE add rounded <- [m10]
-- [m12] <- MUTATE add floored <- [m11]
-- [m13] <- MUTATE add ceiled <- [m12]
-- [m14] <- MUTATE add abs_diff <- [m13]
-- [m15] <- MUTATE add label <- [m14]
-- [m16] <- MUTATE add upper_label <- [m15]
-- [m17] <- MUTATE add lower_label <- [m16]
-- [m18] <- MUTATE add label_length <- [m17]
-- [m19] <- MUTATE add trimmed_label <- [m18]
-- [m20] <- MUTATE add greeting <- [m19]
-- [renamed] <- RENAME {'bedrooms': 'beds', 'bathrooms': 'baths', 'price': 'cost', 'sqft': 'square_feet'} <- [m20]
-- [selected] <- SELECT ['label', 'beds', 'baths', 'square_feet', 'cost', 'price_per_sqft', 'luxury_score', 'millions', 'ppb', 'root_sqft', 'rounded', 'floored', 'ceiled', 'abs_diff', 'greeting'] <- [renamed]
-- [c1] <- CAST beds -> string <- [selected]
-- [c2] <- CAST millions -> float <- [c1]
-- [c3] <- CAST label -> string <- [c2]
-- [by_luxury] <- SORT BY luxury_score desc <- [c3]
-- [best_value] <- SORT BY price_per_sqft asc <- [c3]
-- [most_expensive] <- SORT BY cost desc <- [c3]
-- [top3_luxury] <- LIMIT 3 <- [by_luxury]
-- [random_pick] <- SAMPLE 50.0% <- [most_expensive]
-- [unique_homes] <- DISTINCT <- [top3_luxury]
-- [grouped] <- GROUP BY beds <- [c3]
-- [final_grouped] <- SORT BY total_homes desc <- [grouped]
-- [lr_predicted] <- PREDICT using lr <- [raw]
-- [rf_predicted] <- PREDICT using rf <- [raw]
-- [dt_predicted] <- PREDICT using dt <- [raw]
-- [ml_results] <- SELECT ['bedrooms', 'bathrooms', 'sqft', 'price', 'prediction'] <- [dt_predicted]
-- [final_report.json] <- WRITE json <- [final_grouped]
-- [final_report.csv] <- WRITE csv <- [final_grouped]
-- [ml_predictions.json] <- WRITE json <- [ml_results]
-- [final_report.xlsx] <- EXCEL WRITE <- [final_grouped]
-- [ml_predictions.xlsx] <- EXCEL WRITE <- [ml_results]
+- [m5] <- MUTATE add rounded <- [m4]
+- [m6] <- MUTATE add sqrt_sqft <- [m5]
+- [m7] <- MUTATE add label <- [m6]
+- [m8] <- MUTATE add upper_label <- [m7]
+- [m9] <- MUTATE add label_len <- [m8]
+- [renamed] <- RENAME <- [m9]
+- [selected] <- SELECT <- [renamed]
+- [c1] <- CAST <- [selected]
+- [c2] <- CAST <- [c1]
+- [grouped] <- GROUP BY beds <- [c2]
+- [final] <- SORT <- [grouped]
+- [predicted] <- PREDICT <- [raw]
+- [ml_results] <- SELECT <- [predicted]
+- [final_output.json] <- WRITE <- [final]
+- [final_output.csv] <- WRITE <- [final]
 
 ---
 

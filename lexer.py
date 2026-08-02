@@ -1,55 +1,87 @@
 from errors import LexerError
-import re
 
 KEYWORDS = {
-    "pipeline": "PIPELINE", "filter": "FILTER", "select": "SELECT",
-    "where": "WHERE", "join": "JOIN", "inner": "INNER",
-    "left": "LEFT", "right": "RIGHT", "write": "WRITE",
-    "group": "GROUP", "read": "READ", "from": "FROM",
-    "into": "INTO", "with": "WITH", "on": "ON", "by": "BY",
-    "as": "AS", "and": "AND", "or": "OR", "not": "NOT",
-    "sum": "SUM", "count": "COUNT", "avg": "AVG",
-    "min": "MIN", "max": "MAX", "table": "TABLE",
-    "int": "INT", "string": "STRING", "float": "FLOAT",
-    "bool": "BOOL", "date": "DATE",
-    "sort": "SORT", "asc": "ASC", "desc": "DESC",
-    "distinct": "DISTINCT", "limit": "LIMIT",
-    "mutate": "MUTATE", "add": "ADD", "union": "UNION",
-    "rename": "RENAME", "to": "TO", "print": "PRINT",
-    "if": "IF", "else": "ELSE", "http": "HTTP",
-    "import": "IMPORT", "let": "LET", "for": "FOR",
-    "in": "IN", "func": "FUNC", "case": "CASE",
-    "when": "WHEN", "cast": "CAST", "sample": "SAMPLE",
-    "stats": "STATS", "true": "TRUE", "false": "FALSE",
-    "null": "NULL", "is": "IS",
-    "contains": "CONTAINS", "matches": "MATCHES",
-    "starts_with": "STARTS_WITH", "ends_with": "ENDS_WITH",
-    "concat": "CONCAT", "upper": "UPPER", "lower": "LOWER",
-    "length": "LENGTH", "trim": "TRIM",
-    "abs": "ABS", "round": "ROUND", "ceil": "CEIL",
-    "floor": "FLOOR", "sqrt": "SQRT", "pow": "POW",
-    "now": "NOW", "today": "TODAY",
-    "year": "YEAR", "month": "MONTH", "day": "DAY",
-    "chart": "CHART", "bar": "BAR", "line": "LINE", "pie": "PIE",
-    "scatter": "SCATTER", "radar": "RADAR",
-    "date_add": "DATE_ADD", "date_diff": "DATE_DIFF",
-    "date_format": "DATE_FORMAT", "day_name": "DAY_NAME",
-    "month_name": "MONTH_NAME",
-    "chart": "CHART", "bar": "BAR", "line": "LINE", "pie": "PIE",
-    "scatter": "SCATTER", "radar": "RADAR",
-    "date_add": "DATE_ADD", "date_diff": "DATE_DIFF",
-    "date_format": "DATE_FORMAT", "day_name": "DAY_NAME",
-    "month_name": "MONTH_NAME",
+    # Pipeline
+    "pipeline": "PIPELINE", "func": "FUNC", "import": "IMPORT",
+    "let": "LET", "as": "AS", "in": "IN",
+    
+    # I/O
+    "read": "READ", "write": "WRITE", "http": "HTTP",
+    "excel": "EXCEL", "into": "INTO", "from": "FROM",
+    
+    # Transform
+    "filter": "FILTER", "where": "WHERE", "select": "SELECT",
+    "sort": "SORT", "by": "BY", "limit": "LIMIT",
+    "mutate": "MUTATE", "add": "ADD", "rename": "RENAME",
+    "cast": "CAST", "sample": "SAMPLE", "distinct": "DISTINCT",
+    
+    # Aggregate
+    "group": "GROUP", "join": "JOIN", "union": "UNION",
+    "with": "WITH", "on": "ON", "inner": "INNER",
+    "left": "LEFT", "right": "RIGHT",
+    
+    # ML
     "train": "TRAIN", "predict": "PREDICT", "using": "USING",
     "model": "MODEL", "linear_regression": "LINEAR_REGRESSION",
     "random_forest": "RANDOM_FOREST", "decision_tree": "DECISION_TREE",
-    "logistic_regression": "LOGISTIC_REGRESSION",
-    "random_forest_classifier": "RANDOM_FOREST_CLASSIFIER",
-    "decision_tree_classifier": "DECISION_TREE_CLASSIFIER",
-    "db_read": "DB_READ", "db_write": "DB_WRITE",
-    "excel": "EXCEL", "xlsx": "XLSX", "sheet": "SHEET",
-    "report": "REPORT",
-    "alert": "ALERT",
+    
+    # Output
+    "print": "PRINT", "stats": "STATS", "chart": "CHART",
+    "report": "REPORT", "alert": "ALERT",
+    
+    # Control Flow
+    "if": "IF", "else": "ELSE", "for": "FOR",
+    "case": "CASE", "when": "WHEN",
+    
+    # NEW: Error Handling
+    "try": "TRY", "catch": "CATCH",
+    
+    # NEW: Pivot & Window
+    "pivot": "PIVOT", "rows": "ROWS", "to": "TO",
+    "columns": "COLUMNS", "rank": "RANK", "over": "OVER",
+    "partition": "PARTITION", "order": "ORDER",
+    
+    # NEW: CTE
+    "define": "DEFINE",
+    
+    # NEW: Export
+    "export": "EXPORT", "sql": "SQL", "pdf": "PDF",
+    "email": "EMAIL", "slack": "SLACK", "upload": "UPLOAD",
+    "s3": "S3",
+    
+    # Types
+    "table": "TABLE", "int": "INT", "string": "STRING",
+    "float": "FLOAT", "bool": "BOOL", "date": "DATE",
+    
+    # Direction
+    "asc": "ASC", "desc": "DESC",
+    
+    # Chart types
+    "bar": "BAR", "pie": "PIE", "line": "LINE",
+    "scatter": "SCATTER", "radar": "RADAR",
+    
+    # Boolean & Null
+    "true": "TRUE", "false": "FALSE", "null": "NULL",
+    "is": "IS", "not": "NOT", "and": "AND", "or": "OR",
+    
+    # Aggregation functions
+    "count": "COUNT", "sum": "SUM", "avg": "AVG",
+    "min": "MIN", "max": "MAX",
+    
+    # Built-in functions
+    "upper": "UPPER", "lower": "LOWER", "length": "LENGTH",
+    "trim": "TRIM", "concat": "CONCAT",
+    "abs": "ABS", "round": "ROUND", "ceil": "CEIL",
+    "floor": "FLOOR", "sqrt": "SQRT", "pow": "POW",
+    "today": "TODAY", "now": "NOW",
+    "year": "YEAR", "month": "MONTH", "day": "DAY",
+    "date_add": "DATE_ADD", "date_diff": "DATE_DIFF",
+    "date_format": "DATE_FORMAT", "day_name": "DAY_NAME",
+    "month_name": "MONTH_NAME",
+    
+    # NEW: Regex
+    "matches": "MATCHES", "contains": "CONTAINS",
+    "starts_with": "STARTS_WITH", "ends_with": "ENDS_WITH",
 }
 
 class Token:
@@ -84,10 +116,8 @@ class Lexer:
             if self.source[self.pos:self.pos+2] == "/*":
                 self.pos += 2; self.column += 2
                 while self.pos < len(self.source) and self.source[self.pos:self.pos+2] != "*/":
-                    if self.source[self.pos] == "\n":
-                        self.line += 1; self.column = 1
-                    else:
-                        self.column += 1
+                    if self.source[self.pos] == "\n": self.line += 1; self.column = 1
+                    else: self.column += 1
                     self.pos += 1
                 self.pos += 2; self.column += 2
                 continue
@@ -98,10 +128,8 @@ class Lexer:
             if ch == '"':
                 start = self.pos; self.pos += 1; self.column += 1
                 while self.pos < len(self.source) and self.source[self.pos] != '"':
-                    if self.source[self.pos] == '\n':
-                        self.line += 1; self.column = 1
-                    else:
-                        self.column += 1
+                    if self.source[self.pos] == '\n': self.line += 1; self.column = 1
+                    else: self.column += 1
                     self.pos += 1
                 if self.pos >= len(self.source):
                     raise LexerError("Unterminated string", self.line, self.column)
@@ -114,12 +142,34 @@ class Lexer:
                 start = self.pos; self.pos += 1; self.column += 1
                 while self.pos < len(self.source) and self.source[self.pos] != '#':
                     if self.source[self.pos] == '\n':
-                        raise LexerError("Unterminated date literal", self.line, self.column)
+                        raise LexerError("Unterminated date", self.line, self.column)
                     self.pos += 1; self.column += 1
                 if self.pos >= len(self.source):
-                    raise LexerError("Unterminated date literal", self.line, self.column)
+                    raise LexerError("Unterminated date", self.line, self.column)
                 self.pos += 1; self.column += 1
                 self.tokens.append(Token("DATE_LIT", self.source[start:self.pos], self.line, self.column - (self.pos - start)))
+                continue
+            
+            # NEW: Multi-line string """
+            if self.source[self.pos:self.pos+3] == '"""':
+                start = self.pos; self.pos += 3; self.column += 3
+                while self.pos < len(self.source) and self.source[self.pos:self.pos+3] != '"""':
+                    if self.source[self.pos] == '\n': self.line += 1; self.column = 1
+                    else: self.column += 1
+                    self.pos += 1
+                self.pos += 3; self.column += 3
+                self.tokens.append(Token("STRING_LIT", self.source[start:self.pos], self.line, self.column - (self.pos - start)))
+                continue
+            
+            # NEW: Template string ${...}
+            if self.source[self.pos:self.pos+2] == '${':
+                start = self.pos; self.pos += 2; self.column += 2
+                while self.pos < len(self.source) and self.source[self.pos] != '}':
+                    if self.source[self.pos] == '\n': self.line += 1; self.column = 1
+                    else: self.column += 1
+                    self.pos += 1
+                self.pos += 1; self.column += 1
+                self.tokens.append(Token("TEMPLATE", self.source[start:self.pos], self.line, self.column - (self.pos - start)))
                 continue
             
             if ch.isdigit():
@@ -139,6 +189,11 @@ class Lexer:
                 else:
                     self.tokens.append(Token("IDENTIFIER", word, self.line, start_col))
                 continue
+            
+            # NEW: Lambda arrow =>
+            if self.source[self.pos:self.pos+2] == "=>":
+                self.tokens.append(Token("ARROW", "=>", self.line, self.column))
+                self.pos += 2; self.column += 2; continue
             
             two_char = self.source[self.pos:self.pos+2]
             if two_char in ("->", "==", "!=", ">=", "<="):
