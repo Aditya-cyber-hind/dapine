@@ -76,6 +76,8 @@ class Interpreter:
     def execute_step(self, step):
         if isinstance(step, ReadStep): return self.runtime.execute_read(step)
         elif isinstance(step, HttpReadStep): return self.runtime.execute_http_read(step)
+        elif isinstance(step, AnomalyStep):
+            return self.runtime.execute_anomaly(step)
         elif isinstance(step, FilterStep): return self.runtime.execute_filter(step)
         elif isinstance(step, SelectStep): return self.runtime.execute_select(step)
         elif isinstance(step, JoinStep): return self.runtime.execute_join(step)

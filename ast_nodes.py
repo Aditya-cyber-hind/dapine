@@ -380,6 +380,26 @@ class ArrayLiteral(ASTNode):
     def __init__(self, elements):
         self.elements = elements
 
+class ScheduleStep(Step):
+    def __init__(self, interval, unit, body, line):
+        super().__init__("schedule", [interval, unit], None, line)
+        self.interval = interval
+        self.unit = unit
+        self.body = body
+
+class AnomalyStep(Step):
+    def __init__(self, input_ref, column, method, threshold, alias, line):
+        super().__init__("anomaly", [input_ref, column], alias, line)
+        self.input_ref = input_ref
+        self.column = column
+        self.method = method
+        self.threshold = threshold
+
+class ServeStep(Step):
+    def __init__(self, port, line):
+        super().__init__("serve", [], None, line)
+        self.port = port
+
 class DictLiteral(ASTNode):
     def __init__(self, pairs):
         self.pairs = pairs

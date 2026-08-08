@@ -82,6 +82,13 @@ KEYWORDS = {
     # NEW: Regex
     "matches": "MATCHES", "contains": "CONTAINS",
     "starts_with": "STARTS_WITH", "ends_with": "ENDS_WITH",
+
+    "schedule": "SCHEDULE", "seconds": "SECONDS",
+    "minutes": "MINUTES", "hours": "HOURS",
+    "daily": "DAILY",
+    "serve": "SERVE",
+    "translate": "TRANSLATE",
+    "anomaly": "ANOMALY", "zscore": "ZSCORE",
 }
 
 class Token:

@@ -202,7 +202,10 @@ class Runtime:
         if isinstance(step, ReadStep): return self.execute_read(step)
         elif isinstance(step, HttpReadStep): return self.execute_http_read(step)
         elif isinstance(step, FilterStep): return self.execute_filter(step)
+        elif isinstance(step, AnomalyStep): return self.execute_anomaly(step)
         elif isinstance(step, SelectStep): return self.execute_select(step)
+        elif isinstance(step, ScheduleStep): return self.execute_schedule(step)
+        elif isinstance(step, ServeStep): return self.execute_serve(step)
         elif isinstance(step, JoinStep): return self.execute_join(step)
         elif isinstance(step, GroupStep): return self.execute_group(step)
         elif isinstance(step, WriteStep): self.execute_write(step)
@@ -258,9 +261,9 @@ class Runtime:
             df.inferred_types = TypeSystem.infer_schema(all_rows)
             self.dataframes[name] = df
             self.log_lineage(name, step.source, f"READ {len(files)} FILES")
-            print(f"  📂 Read {len(files)} files → {len(all_rows)} rows")
             return df
 
+        # DuckDB path
         if self.use_duckdb and step.format_type in ("csv","json"):
             duck = self._get_duck()
             t = step.alias or f"_t_{len(self.dataframes)}"
@@ -272,7 +275,9 @@ class Runtime:
             self.dataframes[name] = df
             self.log_lineage(name, step.source, f"READ {step.format_type.upper()}")
             return df
-        if step.format_type=="csv":
+        
+        # CSV
+        if step.format_type == "csv":
             try:
                 with open(step.source,"r", encoding='utf-8') as f:
                     r = csv.DictReader(f)
@@ -287,7 +292,9 @@ class Runtime:
                     return df
             except FileNotFoundError:
                 raise RuntimeError(f"File not found: '{step.source}'", step.line)
-        elif step.format_type=="json":
+        
+        # JSON
+        elif step.format_type == "json":
             try:
                 with open(step.source,"r", encoding='utf-8') as f:
                     data = json.load(f)
@@ -303,17 +310,67 @@ class Runtime:
                     return df
             except FileNotFoundError:
                 raise RuntimeError(f"File not found: '{step.source}'", step.line)
-        elif step.format_type=="parquet":
+        
+        # Parquet
+        elif step.format_type == "parquet":
             from connectors import Connectors
             rows, schema = Connectors().read_parquet(step.source)
             name = step.alias or f"_df_{len(self.dataframes)}"
             df = DataFrame(rows, schema, "read parquet")
-            from dapine_types import TypeSystem
-            df.inferred_types = TypeSystem.infer_schema(rows)
             self.dataframes[name] = df
             self.log_lineage(name, step.source, "READ PARQUET")
             return df
+        
+        # PDF
+        elif step.format_type == "pdf":
+            try:
+                import pdfplumber
+                rows = []
+                with pdfplumber.open(step.source) as pdf:
+                    for page in pdf.pages:
+                        table = page.extract_table()
+                        if table:
+                            headers = [str(h) for h in table[0]]
+                            for row in table[1:]:
+                                rows.append({headers[i]: row[i] for i in range(len(headers))})
+                schema = list(rows[0].keys()) if rows else []
+                name = step.alias or f"_df_{len(self.dataframes)}"
+                df = DataFrame(rows, schema, "read pdf")
+                from dapine_types import TypeSystem
+                df.inferred_types = TypeSystem.infer_schema(rows)
+                self.dataframes[name] = df
+                self.log_lineage(name, step.source, "READ PDF")
+                return df
+            except Exception as e:
+                raise RuntimeError(f"PDF read error: {e}", step.line)
+        
         raise RuntimeError(f"Unsupported: {step.format_type}", step.line)
+
+    def execute_schedule(self, step):
+        """Run a pipeline on a schedule."""
+        import threading
+        import time as t
+        
+        def run_scheduled():
+            while True:
+                for s in step.body:
+                    self.execute_step(s)
+                print(f"  ⏰ Scheduled run completed. Next in {step.interval} {step.unit}")
+                t.sleep(self._get_interval_seconds(step.interval, step.unit))
+        
+        thread = threading.Thread(target=run_scheduled, daemon=True)
+        thread.start()
+        print(f"  ⏰ Scheduled: every {step.interval} {step.unit}")
+        return None
+    
+    def _get_interval_seconds(self, interval, unit):
+        if unit == "seconds": return interval
+        if unit == "minutes": return interval * 60
+        if unit == "hours": return interval * 3600
+        if unit == "daily": return 86400
+        return interval
+
+    
 
     def execute_http_read(self, step):
         try:
@@ -342,6 +399,12 @@ class Runtime:
                 return df
         except Exception as e:
             raise RuntimeError(f"HTTP read failed: {e}", step.line)
+
+    def execute_serve(self, step):
+        from dashboard import start_dashboard, update_dashboard
+        update_dashboard(self)
+        start_dashboard(step.port)
+        return None
 
     def execute_let(self, step):
         self.variables[step.var_name] = self._eval_atomic(step.value, {})
@@ -756,6 +819,20 @@ class Runtime:
         if expr.name=="floor": return math.floor(args[0]) if args[0] is not None else None
         if expr.name=="sqrt": return math.sqrt(args[0]) if args[0] is not None and args[0]>=0 else None
         if expr.name=="today": return date.today()
+        if expr.name == "translate":
+            # Simple built-in dictionary for common words
+            translations = {
+                "hello": {"hindi": "नमस्ते", "spanish": "hola", "french": "bonjour"},
+                "price": {"hindi": "कीमत", "spanish": "precio", "french": "prix"},
+                "house": {"hindi": "घर", "spanish": "casa", "french": "maison"},
+                "bedroom": {"hindi": "शयनकक्ष", "spanish": "dormitorio", "french": "chambre"},
+                "bathroom": {"hindi": "स्नानघर", "spanish": "baño", "french": "salle de bain"},
+            }
+            if len(args) >= 2:
+                word = str(args[0]).lower()
+                lang = str(args[1]).lower()
+                return translations.get(word, {}).get(lang, word)
+            return args[0] if args else ""
         return None
 
     def eval_condition(self, expr, row):
@@ -774,6 +851,54 @@ class Runtime:
                    "and": lambda a,b: a and b, "or": lambda a,b: a or b}
             if expr.op in ops: return ops[expr.op](l, r)
         return self._eval_atomic(expr, row)
+
+    
+    def execute_anomaly(self, step):
+        df = self.get_df(step.input_ref, step.line)
+        
+        # Auto-detect numeric column if column is "value" (default)
+        column = step.column
+        if column == "value" or not column:
+            for col in df.schema:
+                vals = [r.get(col) for r in df.rows if r.get(col) is not None]
+                if vals and all(isinstance(v, (int, float)) for v in vals[:5]):
+                    column = col
+                    break
+        
+        values = [float(r.get(column, 0)) for r in df.rows if r.get(column) is not None]
+        
+        if step.method == "zscore":
+            import statistics
+            mean = statistics.mean(values)
+            std = statistics.stdev(values) if len(values) > 1 else 1
+            threshold = step.threshold or 2.0
+            
+            anomalies = []
+            normal = []
+            for row in df.rows:
+                val = float(row.get(column, 0) or 0)
+                zscore = abs((val - mean) / std) if std > 0 else 0
+                if zscore > threshold:
+                    row_copy = dict(row)
+                    row_copy["zscore"] = round(zscore, 2)
+                    row_copy["is_anomaly"] = True
+                    anomalies.append(row_copy)
+                else:
+                    row_copy = dict(row)
+                    row_copy["zscore"] = round(zscore, 2)
+                    row_copy["is_anomaly"] = False
+                    normal.append(row_copy)
+            
+            result = anomalies + normal
+            name = step.alias or f"_df_{len(self.dataframes)}"
+            schema = df.schema + ["zscore", "is_anomaly"]
+            ndf = DataFrame(result, schema, f"anomaly detection")
+            self.dataframes[name] = ndf
+            
+            print(f"  🔍 Anomaly: {len(anomalies)} outliers in {column} (threshold={threshold})")
+            return ndf
+        
+        return df
 
     def eval_arithmetic(self, expr, row):
         if isinstance(expr, ArithOp):

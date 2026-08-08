@@ -1,0 +1,15 @@
+pipeline new_features_test() {
+    read "houses.csv" as raw
+    print raw
+    
+    // Anomaly Detection
+    anomaly in raw using zscore 2.0 as outliers
+    print outliers
+    
+    // Translation
+    mutate raw add hindi_price = translate("price", "hindi") as with_hindi
+    print with_hindi
+    
+    // Schedule (won't actually run - just tests parsing)
+    let test_var = 1
+}

@@ -92,9 +92,46 @@ class Parser:
             "TRY": self.parse_try, "PIVOT": self.parse_pivot, "EXPORT": self.parse_export,
             "EMAIL": self.parse_email, "SLACK": self.parse_slack, "UPLOAD": self.parse_s3,
             "RANK": self.parse_window,
+            "SCHEDULE": self.parse_schedule,
+            "SERVE": self.parse_serve,
+            "ANOMALY": self.parse_anomaly,
         }
         if t.type in type_map: return type_map[t.type]()
         raise ParserError(f"Unknown: {t.value}", t.line, t.column)
+
+    def parse_schedule(self):
+        line = self.peek().line
+        self.consume("SCHEDULE")
+        interval = int(self.consume("NUMBER_LIT").value)
+        unit = self.peek().value; self.consume()
+        self.consume("LBRACE")
+        body = self.parse_steps()
+        self.consume("RBRACE")
+        return ScheduleStep(interval, unit, body, line)
+
+    def parse_anomaly(self):
+        line = self.peek().line
+        self.consume("ANOMALY")
+        self.consume("IN")
+        input_ref = self.consume("IDENTIFIER").value
+        self.consume("USING")
+        method = self.peek().value; self.consume()
+        threshold = 2.0
+        if self.peek() and self.peek().type == "NUMBER_LIT":
+            threshold = float(self.consume("NUMBER_LIT").value)
+        alias = None
+        if self.peek() and self.peek().type == "AS":
+            self.consume("AS"); alias = self.consume("IDENTIFIER").value
+        return AnomalyStep(input_ref, input_ref.split('.')[-1] if '.' in input_ref else 'value', method, threshold, alias, line)
+
+
+    def parse_serve(self):
+        line = self.peek().line
+        self.consume("SERVE")
+        port = 8080
+        if self.peek().type == "NUMBER_LIT":
+            port = int(self.consume("NUMBER_LIT").value)
+        return ServeStep(port, line)
 
     def parse_read(self):
         line = self.peek().line
@@ -110,6 +147,7 @@ class Parser:
             else: alias = n.value; self.consume()
         if self.peek() and self.peek().type == "AS":
             self.consume("AS"); alias = self.consume("IDENTIFIER").value
+        if source.endswith(".pdf"): fmt = "pdf"
         return ReadStep(source, fmt, {}, alias, line)
 
     def parse_http_read(self):
@@ -525,7 +563,7 @@ class Parser:
             self.consume()
             try: return DateLiteral(date.fromisoformat(t.value.strip('#')))
             except: raise ParserError("Invalid date", t.line, t.column)
-        if t.type in ("UPPER","LOWER","LENGTH","TRIM","ABS","ROUND","CEIL","FLOOR","SQRT","TODAY","NOW","YEAR","MONTH","DAY","POW","CONCAT"):
+        if t.type in ("UPPER","LOWER","LENGTH","TRIM","ABS","ROUND","CEIL","FLOOR","SQRT","TODAY","NOW","YEAR","MONTH","DAY","POW","CONCAT","TRANSLATE"):
             func = self.consume().value
             self.consume("LPAREN"); args = []
             if self.peek().type != "RPAREN":
